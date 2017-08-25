@@ -8,7 +8,6 @@
 variable runtime_hostname {}
 variable docker_registry_token {}
 variable docker_registry {}
-variable docker_ee_repo {}
 variable docker_registry_pattern_manager_version {}
 variable docker_registry_software_repo_version {}
 variable chef_version {}
@@ -29,6 +28,7 @@ variable ibm_pm_public_ssh_key_name {}
 variable ibm_pm_private_ssh_key {}
 variable ibm_pm_public_ssh_key {}
 variable user_public_ssh_key {}
+variable docker_ee_repo {}
 variable vsphere_server {}
 variable vsphere_datacenter {}
 variable vsphere_datastore {}
@@ -263,11 +263,11 @@ function check_command_and_install() {
 function install_chef() {
   # pull the checksum from the install download
   CHEFCHECKSUM_URL=$CHEF_URL.sha1
-  check_command_and_install wget wget wget
+  check_command_and_install curl curl curl
   echo "[*] Downloading Chef server's checksum"
-  wget -t 3 -nv $CHEFCHECKSUM_URL && mv chef-server-core*.sha1 chef-server.sha1 && CHEFCHECKSUM=`cat chef-server.sha1`;
+  curl --retry 5 --progress-bar $CHEFCHECKSUM_URL > chef-server.sha1 && CHEFCHECKSUM=`cat chef-server.sha1`;
   echo "[*] Downloading Chef server"
-  wget -t 3 $CHEF_URL && mv chef-server-core* chef-server;
+  curl --retry 5 --progress-bar $CHEF_URL > chef-server;
   echo "$CHEFCHECKSUM chef-server" > chef.sums
   sha1sum -c chef.sums
 
@@ -704,19 +704,6 @@ EndOfFile
 ######################################################################################
 #!/usr/bin/env bash
 
-# This line will determine if the machine is in AWS, if so, it must curl the IPAddress. Otherwise the code will sed its way thru the ip addr return removing all local, and private IPs to find the public IP
-[[  "`grep amazon /sys/devices/virtual/dmi/id/bios_version`" ]] && environment="aws" || environment="other"
-
-# Set defaults for the values from environment before sets
-if [ -z "$SOFTWARE_REPO_IP" ] ; then
-        SOFTWARE_REPO_IP=$IPADDR
-fi
-if [ -z "$SOFTWARE_REPO_PORT" ] ; then
-        SOFTWARE_REPO_PORT="8888"
-fi
-
-
-
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -760,6 +747,12 @@ function setup_other_private() {
 function setup_other_public() {
 # this is used to get the domain name of the docker host, and pass to the rest of the infrastructure, based on the docker node
         IPADDR=`ip addr | tr -s ' ' | egrep 'inet ' | sed -e 's/inet //' -e 's/addr://' -e 's/ Bcast.*//' -e 's/ netmask.*//' -e 's/ brd.*//'  -e 's/^ 127\..*//' -e 's/^ 172\...\.0\.1.*//' -e 's/^ 10\..*//' -e 's/^ 192.168\..*//' | cut -f1 -d'/'| xargs echo`
+        DOMAIN=`hostname -d`
+        HOSTNAME=`hostname | cut -f1 -d.`
+}
+
+function setup_static_public() {
+# This is the case that we have the IP address
         DOMAIN=`hostname -d`
         HOSTNAME=`hostname | cut -f1 -d.`
 }
@@ -899,6 +892,7 @@ while IFS='' read -r parameter || [[ -n "$parameter" ]]; do
         [[ $parameter =~ ^-hh|--ibm_contenthub_git_host= ]] && { CAMHUB_HOST=`echo $parameter|cut -f2- -d'='`; continue;  };
         [[ $parameter =~ ^-ho|--ibm_contenthub_git_organization= ]] && { CAMHUB_ORG=`echo $parameter|cut -f2- -d'='`; continue;  };
         [[ $parameter =~ ^-hc|--ibm_openhub_git_organization= ]] && { CAMHUB_OPEN_ORG=`echo $parameter|cut -f2- -d'='`; continue;  };
+        [[ $parameter =~ ^-ip|--ip_address= ]] && { IPADDR=`echo $parameter|cut -f2- -d'='`; continue;  };
         [[ $parameter =~ ^-si|--software_repo_ip= ]] && { SOFTWARE_REPO_IP=`echo $parameter|cut -f2- -d'='`; continue;  };
         [[ $parameter =~ ^-sr|--software_repo= ]] && { SOFTWARE_REPO=`echo $parameter|cut -f2- -d'='`; continue;  };
         [[ $parameter =~ ^-sp|--software_repo_port= ]] && { SOFTWARE_REPO_PORT=`echo $parameter|cut -f2- -d'='`; continue;  };
@@ -940,6 +934,9 @@ OFFLINE="false"
 [[ `ping -c 3 -w 10 www.ibm.com | egrep "0 received,"` ]] && OFFLINE="true" || OFFLINE="false"
 
 # The main difference between aws and other is the network and getting some information
+# This line will determine if the machine is in AWS, if so, it must curl the IPAddress. Otherwise the code will sed its way thru the ip addr return removing all local, and private IPs to find the public IP
+[[  "`grep amazon /sys/devices/virtual/dmi/id/bios_version`" ]] && environment="aws" || environment="other"
+[[ ! "$IPADDR" = "dynamic" ]] && environment="static"
 setup_"$environment"_"$PRIVATE_NETWORK"
 
 # set values which were not provided as parameters
@@ -1212,7 +1209,7 @@ EndOfFile
     inline = [
         "chmod 775 launch-docker-compose.sh",
         "chmod 775 image-upgrade.sh",
-        "bash -c \"./launch-docker-compose.sh ${var.network_visibility} --docker_registry_token=${var.docker_registry_token}  --nfs_mount_point=${var.nfs_mount} --software_repo_user='${var.ibm_sw_repo_user}' --software_repo_pass='${var.ibm_sw_repo_password}' --im_repo_user='${var.ibm_im_repo_user}' --im_repo_pass='${var.ibm_im_repo_password}'  --chef_host=chef-server --software_repo=software-repo --pattern_mgr=pattern --ibm_contenthub_git_access_token=${var.ibm_contenthub_git_access_token} --ibm_contenthub_git_host=${var.ibm_contenthub_git_host} --ibm_contenthub_git_organization=${var.ibm_contenthub_git_organization} --ibm_openhub_git_organization=${var.ibm_openhub_git_organization} --chef_org=${var.chef_org} --chef_admin=${var.chef_admin} --docker_registry=${var.docker_registry} --chef_version=${var.chef_version} --ibm_pm_access_token=${var.ibm_pm_access_token} --ibm_pm_admin_token=${var.ibm_pm_admin_token} --software_repo_version=${var.docker_registry_software_repo_version} --docker_ee_repo=${var.docker_ee_repo} --pattern_mgr_version=${var.docker_registry_pattern_manager_version} --docker_configuration=single-node --ibm_pm_public_ssh_key_name=${var.ibm_pm_public_ssh_key_name} --ibm_pm_private_ssh_key=${var.ibm_pm_private_ssh_key} --user_public_ssh_key='${var.user_public_ssh_key}' --prereq_strictness='${var.prereq_strictness}'\""
+        "bash -c \"./launch-docker-compose.sh ${var.network_visibility} --docker_registry_token=${var.docker_registry_token}  --nfs_mount_point=${var.nfs_mount} --software_repo_user='${var.ibm_sw_repo_user}' --software_repo_pass='${var.ibm_sw_repo_password}' --im_repo_user='${var.ibm_im_repo_user}' --im_repo_pass='${var.ibm_im_repo_password}'  --chef_host=chef-server --software_repo=software-repo --pattern_mgr=pattern --ibm_contenthub_git_access_token=${var.ibm_contenthub_git_access_token} --ibm_contenthub_git_host=${var.ibm_contenthub_git_host} --ibm_contenthub_git_organization=${var.ibm_contenthub_git_organization} --ibm_openhub_git_organization=${var.ibm_openhub_git_organization} --chef_org=${var.chef_org} --chef_admin=${var.chef_admin} --docker_registry=${var.docker_registry} --chef_version=${var.chef_version} --ibm_pm_access_token=${var.ibm_pm_access_token} --ibm_pm_admin_token=${var.ibm_pm_admin_token} --software_repo_version=${var.docker_registry_software_repo_version} --docker_ee_repo=${var.docker_ee_repo} --pattern_mgr_version=${var.docker_registry_pattern_manager_version} --docker_configuration=single-node --ibm_pm_public_ssh_key_name=${var.ibm_pm_public_ssh_key_name} --ibm_pm_private_ssh_key=${var.ibm_pm_private_ssh_key} --user_public_ssh_key='${var.user_public_ssh_key}' --prereq_strictness='${var.prereq_strictness}' --ip_address='${var.ipv4_address}' \""
       ]
    }
 }
@@ -1229,7 +1226,6 @@ EndOfFile
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
 output "docker_registry_token" { value = "${var.docker_registry_token}"}
 output "docker_registry" { value = "${var.docker_registry}"}
-output "docker_ee_repo" { value = "${var.docker_ee_repo}"}
 output "docker_registry_pattern_manager_version" { value = "${var.docker_registry_pattern_manager_version}"}
 output "docker_registry_software_repo_version" { value = "${var.docker_registry_software_repo_version}"}
 output "chef_version" { value = "${var.chef_version}"}
@@ -1250,6 +1246,7 @@ output "ibm_pm_public_ssh_key_name" { value = "${var.ibm_pm_public_ssh_key_name}
 output "ibm_pm_private_ssh_key" { value = "${var.ibm_pm_private_ssh_key}"}
 output "ibm_pm_public_ssh_key" { value = "${var.ibm_pm_public_ssh_key}"}
 output "user_public_ssh_key" { value = "${var.user_public_ssh_key}"}
+output "docker_ee_repo" { value = "${var.docker_ee_repo}"}
 output "vsphere_server" { value = "${var.vsphere_server}"}
 output "vsphere_datacenter" { value = "${var.vsphere_datacenter}"}
 output "vsphere_datastore" { value = "${var.vsphere_datastore}"}
