@@ -13,8 +13,8 @@ variable docker_registry_software_repo_version {}
 variable chef_version {}
 variable ibm_sw_repo_user {}
 variable ibm_sw_repo_password {}
-variable ibm_im_repo_user {}
-variable ibm_im_repo_password {}
+variable ibm_im_repo_user_hidden {}
+variable ibm_im_repo_password_hidden {}
 variable ibm_contenthub_git_access_token {}
 variable ibm_contenthub_git_host {}
 variable ibm_contenthub_git_organization {}
@@ -265,9 +265,9 @@ function install_chef() {
   CHEFCHECKSUM_URL=$CHEF_URL.sha1
   check_command_and_install curl curl curl
   echo "[*] Downloading Chef server's checksum"
-  curl --retry 5 --progress-bar $CHEFCHECKSUM_URL > chef-server.sha1 && CHEFCHECKSUM=`cat chef-server.sha1`;
+  curl --retry 5 --progress-bar $CHEFCHECKSUM_URL > chef-server.sha1 && CHEFCHECKSUM=`cat chef-server.sha1`
   echo "[*] Downloading Chef server"
-  curl --retry 5 --progress-bar $CHEF_URL > chef-server;
+  curl --retry 5 --progress-bar $CHEF_URL > chef-server
   echo "$CHEFCHECKSUM chef-server" > chef.sums
   sha1sum -c chef.sums
 
@@ -1209,7 +1209,7 @@ EndOfFile
     inline = [
         "chmod 775 launch-docker-compose.sh",
         "chmod 775 image-upgrade.sh",
-        "bash -c \"./launch-docker-compose.sh ${var.network_visibility} --docker_registry_token=${var.docker_registry_token}  --nfs_mount_point=${var.nfs_mount} --software_repo_user='${var.ibm_sw_repo_user}' --software_repo_pass='${var.ibm_sw_repo_password}' --im_repo_user='${var.ibm_im_repo_user}' --im_repo_pass='${var.ibm_im_repo_password}'  --chef_host=chef-server --software_repo=software-repo --pattern_mgr=pattern --ibm_contenthub_git_access_token=${var.ibm_contenthub_git_access_token} --ibm_contenthub_git_host=${var.ibm_contenthub_git_host} --ibm_contenthub_git_organization=${var.ibm_contenthub_git_organization} --ibm_openhub_git_organization=${var.ibm_openhub_git_organization} --chef_org=${var.chef_org} --chef_admin=${var.chef_admin} --docker_registry=${var.docker_registry} --chef_version=${var.chef_version} --ibm_pm_access_token=${var.ibm_pm_access_token} --ibm_pm_admin_token=${var.ibm_pm_admin_token} --software_repo_version=${var.docker_registry_software_repo_version} --docker_ee_repo=${var.docker_ee_repo} --pattern_mgr_version=${var.docker_registry_pattern_manager_version} --docker_configuration=single-node --ibm_pm_public_ssh_key_name=${var.ibm_pm_public_ssh_key_name} --ibm_pm_private_ssh_key=${var.ibm_pm_private_ssh_key} --user_public_ssh_key='${var.user_public_ssh_key}' --prereq_strictness='${var.prereq_strictness}' --ip_address='${var.ipv4_address}' \""
+        "bash -c \"./launch-docker-compose.sh ${var.network_visibility} --docker_registry_token=${var.docker_registry_token}  --nfs_mount_point=${var.nfs_mount} --software_repo_user='${var.ibm_sw_repo_user}' --software_repo_pass='${var.ibm_sw_repo_password}' --im_repo_user='${var.ibm_im_repo_user_hidden}' --im_repo_pass='${var.ibm_im_repo_password_hidden}'  --chef_host=chef-server --software_repo=software-repo --pattern_mgr=pattern --ibm_contenthub_git_access_token=${var.ibm_contenthub_git_access_token} --ibm_contenthub_git_host=${var.ibm_contenthub_git_host} --ibm_contenthub_git_organization=${var.ibm_contenthub_git_organization} --ibm_openhub_git_organization=${var.ibm_openhub_git_organization} --chef_org=${var.chef_org} --chef_admin=${var.chef_admin} --docker_registry=${var.docker_registry} --chef_version=${var.chef_version} --ibm_pm_access_token=${var.ibm_pm_access_token} --ibm_pm_admin_token=${var.ibm_pm_admin_token} --software_repo_version=${var.docker_registry_software_repo_version} --docker_ee_repo=${var.docker_ee_repo} --pattern_mgr_version=${var.docker_registry_pattern_manager_version} --docker_configuration=single-node --ibm_pm_public_ssh_key_name=${var.ibm_pm_public_ssh_key_name} --ibm_pm_private_ssh_key=${var.ibm_pm_private_ssh_key} --user_public_ssh_key='${var.user_public_ssh_key}' --prereq_strictness='${var.prereq_strictness}' --ip_address='${var.ipv4_address}' \""
       ]
    }
 }
@@ -1222,6 +1222,10 @@ EndOfFile
   value = "https://${var.ipv4_address}:9999/IMRepo" }
   output "ibm_pm_service" {
   value = "https://${var.ipv4_address}:5443" }
+  output "ibm_im_repo_user" {
+  value = "${var.ibm_sw_repo_user}" }
+  output "ibm_im_repo_password" {
+  value = "${var.ibm_sw_repo_password}" }
 
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
 output "docker_registry_token" { value = "${var.docker_registry_token}"}
@@ -1231,8 +1235,8 @@ output "docker_registry_software_repo_version" { value = "${var.docker_registry_
 output "chef_version" { value = "${var.chef_version}"}
 output "ibm_sw_repo_user" { value = "${var.ibm_sw_repo_user}"}
 output "ibm_sw_repo_password" { value = "${var.ibm_sw_repo_password}"}
-output "ibm_im_repo_user" { value = "${var.ibm_im_repo_user}"}
-output "ibm_im_repo_password" { value = "${var.ibm_im_repo_password}"}
+output "ibm_im_repo_user_hidden" { value = "${var.ibm_im_repo_user_hidden}"}
+output "ibm_im_repo_password_hidden" { value = "${var.ibm_im_repo_password_hidden}"}
 output "ibm_contenthub_git_access_token" { value = "${var.ibm_contenthub_git_access_token}"}
 output "ibm_contenthub_git_host" { value = "${var.ibm_contenthub_git_host}"}
 output "ibm_contenthub_git_organization" { value = "${var.ibm_contenthub_git_organization}"}

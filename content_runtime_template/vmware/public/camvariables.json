@@ -104,7 +104,7 @@
     "immutable": false
   },
   {
-    "name": "ibm_im_repo_user",
+    "name": "ibm_im_repo_user_hidden",
     "type": "string",
     "description": "Username to access the Installation Manager Repository.",
     "default": "repouser",
@@ -117,7 +117,7 @@
     "immutable": true
   },
   {
-    "name": "ibm_im_repo_password",
+    "name": "ibm_im_repo_password_hidden",
     "type": "string",
     "description": "Password to be used for the Installation Manager's new user. The combination of username and password will be required to access the Installation Manager Repository.",
     "hidden": true,
@@ -707,7 +707,7 @@
     "immutable": false
   },
   {
-    "name": "ibm_im_repo_user",
+    "name": "ibm_im_repo_user_hidden",
     "type": "string",
     "description": "Username to access the Installation Manager Repository.",
     "hidden": true,
@@ -719,7 +719,7 @@
     "immutable": true
   },
   {
-    "name": "ibm_im_repo_password",
+    "name": "ibm_im_repo_password_hidden",
     "type": "string",
     "description": "Password to be used for the Installation Manager's new user. The combination of username and password will be required to access the Installation Manager Repository.",
     "hidden": true,
@@ -1228,6 +1228,31 @@
   "system": false,
   "required": false,
   "immutable": false
+},
+{
+  "name": "ibm_im_repo_user",
+  "type": "string",
+  "description": "Output value for the IM repo user",
+  "hidden": false,
+  "label": "Install Manager Repository Username",
+  "group_name": "Cloud Provider",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
+},
+{
+  "name": "ibm_im_repo_password",
+  "type": "string",
+  "description": "Output value for the IM repo user",
+  "hidden": false,
+  "label": "Password for Installation Manager",
+  "group_name": "Cloud Provider",
+  "secured": true,
+  "system": false,
+  "required": false,
+  "immutable": false
 }
+
 ]
 }
