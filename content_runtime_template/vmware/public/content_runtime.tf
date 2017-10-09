@@ -120,6 +120,23 @@ RESULT=0
 CHEF_VERSION=12.11.1
 DOCKER_COMPOSE_VERSION=1.11.2
 
+function wait_apt_lock()
+{
+    sleepC=5
+    while [[ -f /var/lib/dpkg/lock  || -f /var/lib/apt/lists/lock ]]
+    do
+      sleep $sleepC
+      echo "    Checking lock file /var/lib/dpkg/lock or /var/lib/apt/lists/lock"
+      [[ `sudo lsof 2>/dev/null | egrep 'var.lib.dpkg.lock|var.lib.apt.lists.lock'` ]] || break
+      let 'sleepC++'
+      if [ "$sleepC" -gt "50" ] ; then
+ 	lockfile=`sudo lsof 2>/dev/null | egrep 'var.lib.dpkg.lock|var.lib.apt.lists.lock'|rev|cut -f1 -d' '|rev`
+        echo "Lock $lockfile still exists, waited long enough, attempt apt-get. If failure occurs, you will need to cleanup $lockfile"
+        continue
+      fi
+    done
+}
+
 # Identify the platform and version using Python
 if command_exists python; then
   PLATFORM=`python -c "import platform;print(platform.platform())" | rev | cut -d '-' -f3 | rev | tr -d '".' | tr '[:upper:]' '[:lower:]'`
@@ -174,18 +191,7 @@ if [[ $OFFLINE == *"false"* ]]; then
   echo "[*] Updating packages"
   # Check if the script is being run as root
   if [[ $PLATFORM == *"ubuntu"* ]]; then
-    sleepC=5
-    while [ -f /var/lib/dpkg/lock ]
-    do
-      sleep $sleepC
-      echo "    Checking lock file /var/lib/dpkg/lock"
-      [[ `sudo lsof 2>/dev/null | egrep var.lib.dpkg.lock` ]] || break
-      let 'sleepC++'
-      if [ "$sleepC" -gt "50" ] ; then
-        echo "Lock /var/lib/dpkg/lock still exists, waited long enough, attempt apt-get. If failure occurs, you will need to cleanup /var/lib/dpkg/lock"
-        continue
-      fi
-    done
+    wait_apt_lock 
     PACKAGE_MANAGER=apt-get
     sudo -n apt-get -qqy update
   else
@@ -354,6 +360,7 @@ function install_docker() {
   # Install Docker EE if the repo was provided
   if [[ -n $DOCKER_EE_REPO ]]; then
     if [[ $PLATFORM == *"ubuntu"* ]]; then
+      wait_apt_lock
       if [[ $PLATFORM_VERSION == *"14.04"* ]]; then
         sudo apt-get -y install linux-image-extra-$(uname -r) linux-image-extra-virtual
       fi
@@ -389,7 +396,12 @@ function install_docker() {
     fi
   else # Otherwise install CE in supported platforms
     if [[ $PLATFORM == *"ubuntu"* ]] || [[ $PLATFORM == *"centos"* ]]; then
+        [[ $PLATFORM == *"ubuntu"* ]] && wait_apt_lock
         curl -fsSL https://get.docker.com/ | sudo sh
+        if [ $? -ne "0" ]; then # Retry on failure
+            [[ $PLATFORM == *"ubuntu"* ]] && wait_apt_lock
+            curl -fsSL https://get.docker.com/ | sudo sh
+        fi  
     fi
     if [ $? -ne "0" ]; then
       echo "[ERROR] There was an error installing Docker CE"
@@ -456,6 +468,7 @@ CURRENT_DIR=`dirname $0 | cut -c1`
 
 PARAM_FILE="$CONFIG_PATH/.advanced-runtime-config/.launch-docker-compose.sh"
 LOG_FILE="$CONFIG_PATH/.advanced-runtime-config/verification.log"
+CHEF_FILE="$CONFIG_PATH/.advanced-runtime-config/chef-install.log"
 
 . $CONFIG_PATH/utilities.sh
 
@@ -486,14 +499,14 @@ verify_docker() {
 }
 
 verify_docker_service() {
-  if [[ `which systemctl` ]] ; then  
-    echo "[INFORMATIONAL] Docker is `sudo systemctl is-enabled docker` on boot" 
+  if [[ `which systemctl` ]] ; then
+    echo "[INFORMATIONAL] Docker is `sudo systemctl is-enabled docker` on boot"
   elif [[ `ls /etc/init.d/docker` ]] ; then
-    echo "[INFORMATIONAL] Docker service is started via /etc/init.d/docker  on boot" 
-  else 
+    echo "[INFORMATIONAL] Docker service is started via /etc/init.d/docker  on boot"
+  else
     echo "[INFORMATIONAL] Docker service /etc/init.d/docker file not found, docker service may not start on reboot"
   fi
-  
+
 }
 
 verify_containers() {
@@ -503,24 +516,26 @@ verify_containers() {
   # Verify pattern manager container is up
   if [ "$(sudo docker ps | grep $PATTERN_MANAGER_CONTAINER)" ]; then
     echo "[SUCCESS] The Pattern Manager image is running correctly" | tee -a $LOG_FILE
+    sudo docker inspect --format='{{.Image}}' $PATTERN_MANAGER_CONTAINER | tee -a $LOG_FILE
   else
     echo "[ERROR] The Pattern Manager image is currently not running" | tee -a $LOG_FILE
     echo "$(sudo docker ps | grep $PATTERN_MANAGER_CONTAINER)" >> $LOG_FILE
     echo "[*] Docker Log..." | tee -a $LOG_FILE
-    docker ps | grep $PATTERN_MANAGER_CONTAINER | tee -a $LOG_FILE
-    docker ps -a | tee -a $LOG_FILE
+    sudo docker ps | grep $PATTERN_MANAGER_CONTAINER | tee -a $LOG_FILE
+    sudo docker ps -a | tee -a $LOG_FILE
     exit 1
   fi
 
   # Verify repo container is up
   if [ "$(sudo docker ps | grep $SW_REPO_CONTAINER)" ]; then
     echo "[SUCCESS] The Software Repository image is running correctly" | tee -a $LOG_FILE
+    sudo docker inspect --format='{{.Image}}' $SW_REPO_CONTAINER | tee -a $LOG_FILE
   else
     echo "[ERROR] The Software Repository image is currently not running" | tee -a $LOG_FILE
     echo "$(sudo docker ps | grep $SW_REPO_CONTAINER)" >> $LOG_FILE
     echo "[*] Docker Log..." | tee -a $LOG_FILE
     sudo docker ps | grep $SW_REPO_CONTAINER | tee -a $LOG_FILE
-    docker ps -a | tee -a $LOG_FILE
+    sudo docker ps -a | tee -a $LOG_FILE
     exit 1
   fi
 }
@@ -642,6 +657,7 @@ verify_cookbooks() {
   else
     echo "[ERROR] Total Chef role count $ROLE_COUNT, at least 6 expected" | tee -a $LOG_FILE
   fi
+  cat cookbooks.out >> $LOG_FILE
 }
 
 function verify_software_directory()
@@ -653,7 +669,7 @@ function verify_software_directory()
   while test $# -gt 0 ; do
     ls $ABS_PATH/$1 2> /dev/null > /dev/null
     if [[ ! "$?" = "0" ]] ; then
-      echo "    Missing directory : $ABS_PATH/$1" 
+      echo "    Missing directory : $ABS_PATH/$1"
       FAIL_COUNT=1
     fi
     shift
@@ -669,6 +685,7 @@ function echo_log_file_locations()
 {
   echo "[INFORMATIONAL] Addition information can be located in log files :"
   echo -e "\tverification log : \n\t\t$LOG_FILE"
+  echo -e "\tchef installation log : \n\t\t$CHEF_FILE"
   echo -e "\tpattern manager logs : \n`sudo ls -1 /var/log/ibm/docker/pattern-manager/* | xargs -i echo -e '\t\t{}'`"
 }
 
@@ -803,7 +820,7 @@ rm -f /opt/opscode/embedded/service/oc_id/tmp/pids/server.pid
 
 # Configure/post crash reconfigure
 echo "Doing initial configuration of Chef server"
-/usr/bin/chef-server-ctl reconfigure
+/usr/bin/chef-server-ctl reconfigure  2>&1 | tee $CHEF_LOG | egrep ": Processing directory|: Processing cookbook_file"  # do not display lines string w/blanks
 
 # Initial configuration for Chef Manage Web-GUI if installed
 if test -f /usr/bin/chef-manage-ctl; then
@@ -827,6 +844,11 @@ fi
 echo 'Chef Server - CONFIG DONE'
 echo "Chef Server - running on host: $HOSTNAME"
 /usr/bin/chef-server-ctl status
+rc=$?
+if [ $rc -gt 0 ]; then
+	tail -f $CHEF_LOG
+fi
+exit $rc
 EndOfFile
     destination = "./advanced-content-runtime/setupchef.sh"
   }
@@ -1181,14 +1203,17 @@ function docker_disk()
 {
   DISK_NAME=$(find_disk 1) # find the largest disk for formatting
   sudo mkdir -p /etc/docker/
-  if [ ! -z "$DISK_NAME" ] ; then
+  # Ubuntu 14.04 fails to mount the disk because of a downlevel API, do not process the disk if present
+  if [[ ! -z "$DISK_NAME" ]] && [[ `sudo lvcreate --help | egrep wipesignatures` ]] ; then
      echo "Obtained disk name: $DISK_NAME"
      ONE=1
      DOCKER_DISK_NAME=$DISK_NAME$ONE
      (echo n; echo p; echo " "; echo " "; echo " "; echo t; echo 8e; echo w;) | sudo fdisk $DISK_NAME
      sudo pvcreate $DOCKER_DISK_NAME
      echo -e "{ \n\"storage-driver\": \"devicemapper\",\n\t\"storage-opts\": [\n\t\"dm.directlvm_device=$DOCKER_DISK_NAME\",\n\t\"dm.directlvm_device_force=true\"\n\t] \n}" | sudo tee /etc/docker/daemon.json
-     sudo mv /var/lib/docker /var/lib/docker.origin
+     sudo mkdir -p /etc/lvm/profile/
+     echo -e "activation{\nthin_pool_autoextend_threshold=80\nthin_pool_autoextend_percent=20\n}\n" | sudo tee /etc/lvm/profile/docker-thinpool.profile
+     sudo mv /var/lib/docker /var/lib/docker.origin || true
   else
      echo -e "{\n\"storage-driver\": \"devicemapper\"\n}" | sudo tee /etc/docker/daemon.json
   fi
@@ -1441,6 +1466,7 @@ if [[ "$CONFIGURATION" = "single-node" ]] && [[ ! -e $parmdir/chef_setup.done ]]
       export ORG_NAME=$CHEF_ORG
       export ADMIN_NAME=$CHEF_ADMIN
       export ADMIN_MAIL=donotreply@ibm.com
+      export CHEF_LOG=$parmdir/chef-install.log
       [[ -z "$CHEF_ADMIN_PASSWORD" ]] && export ADMIN_PASSWORD='' || export ADMIN_PASSWORD="$CHEF_ADMIN_PASSWORD"
       [[ -z "$CHEF_SSL_CERT_COUNTRY" ]] && export SSL_CERT_COUNTRY='' || export SSL_CERT_COUNTRY="$CHEF_SSL_CERT_COUNTRY"
       [[ -z "$CHEF_SSL_CERT_STATE" ]] && export  SSL_CERT_STATE='' || export SSL_CERT_STATE="$CHEF_SSL_CERT_STATE"
@@ -1616,7 +1642,7 @@ EndOfFile
   output "ibm_im_repo_password" {
   value = "${var.ibm_sw_repo_password}" }
   output "template_timestamp" {
-  value = "2017-10-04 22:15:50" }
+  value = "2017-10-09 18:53:59" }
 ### End VMware output variables
 
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
