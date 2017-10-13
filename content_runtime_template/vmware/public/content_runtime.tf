@@ -415,12 +415,12 @@ function install_docker() {
 function check_firewall {
   # Check for a firewall and allow docker through it
   if command_exists firewall-cmd; then
-    firewall-cmd --state > /dev/null
+    sudo firewall-cmd --state > /dev/null
     if [ $? == "0" ]; then
       echo "[*] Firewall detectected, opening ports"
-      firewall-cmd --permanent --zone=public --change-interface=docker0
-      firewall-cmd --permanent --zone=public --add-port=443/tcp
-      firewall-cmd --reload
+      sudo firewall-cmd --permanent --zone=public --change-interface=docker0
+      sudo firewall-cmd --permanent --zone=public --add-port=443/tcp
+      sudo firewall-cmd --reload
     fi
   fi
 }
@@ -475,8 +475,8 @@ CHEF_FILE="$CONFIG_PATH/.advanced-runtime-config/chef-install.log"
 log_firewall() {
   if command_exists firewall-cmd; then
     echo "[*] Firewall information:"
-    firewall-cmd --state | tee -a $LOG_FILE
-    firewall-cmd --zone=public --list-all | tee -a $LOG_FILE
+    sudo firewall-cmd --state | tee -a $LOG_FILE
+    sudo firewall-cmd --zone=public --list-all | tee -a $LOG_FILE
   fi
 }
 
@@ -496,6 +496,7 @@ verify_docker() {
   else
     echo "[SUCCESS] Docker is currently running" | tee -a $LOG_FILE
   fi
+  sudo cat /etc/docker/daemon.json >> $LOG_FILE 
 }
 
 verify_docker_service() {
@@ -681,6 +682,12 @@ function verify_software_directory()
   fi
 }
 
+function disk_configuration()
+{
+  sudo df -h | egrep "^/dev/|^File" | xargs -i echo "[INFORMATIONAL] {}" | tee -a $LOG_FILE
+  sudo lsblk >> $LOG_FILE
+}
+
 function echo_log_file_locations()
 {
   echo "[INFORMATIONAL] Addition information can be located in log files :"
@@ -695,6 +702,7 @@ echo "[*] Content Runtime template version: `cat $PARAM_FILE | egrep 'template_t
 echo "[*] Hostname : `hostname`, Domain : `hostname -d`" | tee -a $LOG_FILE
 echo -e "/etc/hosts:\n`cat /etc/hosts`\n" >> $LOG_FILE
 echo_log_file_locations
+disk_configuration
 verify_chef
 verify_docker
 verify_docker_service
@@ -1642,7 +1650,7 @@ EndOfFile
   output "ibm_im_repo_password" {
   value = "${var.ibm_sw_repo_password}" }
   output "template_timestamp" {
-  value = "2017-10-09 18:53:59" }
+  value = "2017-10-13 17:37:58" }
 ### End VMware output variables
 
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
