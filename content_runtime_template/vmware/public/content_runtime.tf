@@ -65,6 +65,7 @@ resource "vsphere_virtual_machine" "singlenode" {
   datacenter = "${var.vsphere_datacenter}"
   dns_servers = "${var.vsphere_dns}"
   cluster = "${var.vsphere_cluster}"
+  folder = "${var.vsphere_folder}"
 
 
   network_interface {
@@ -1650,7 +1651,7 @@ EndOfFile
   output "ibm_im_repo_password" {
   value = "${var.ibm_sw_repo_password}" }
   output "template_timestamp" {
-  value = "2017-10-13 20:52:48" }
+  value = "2017-10-16 18:59:35" }
 ### End VMware output variables
 
 output "runtime_hostname" { value = "${var.runtime_hostname}"}

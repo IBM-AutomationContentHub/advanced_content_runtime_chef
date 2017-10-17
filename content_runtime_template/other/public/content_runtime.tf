@@ -1600,7 +1600,7 @@ EndOfFile
   output "ibm_im_repo_password" {
   value = "${var.ibm_sw_repo_password}" }
   output "template_timestamp" {
-  value = "2017-10-13 20:52:52" }
+  value = "2017-10-16 18:59:39" }
 ### End Other output variables
 
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
