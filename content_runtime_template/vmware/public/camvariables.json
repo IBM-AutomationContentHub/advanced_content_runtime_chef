@@ -24,6 +24,10 @@
     {
       "name": "additional_settings",
       "label": "Additional Settings"
+    },
+    {
+      "name": "optional_offline",
+      "label": "Optional Settings for Offline Installation"
     }
   ],
   "output_groups": [
@@ -36,7 +40,7 @@
 {
   "name": "runtime_hostname",
   "type": "string",
-  "description": "The host name of the virtual machine being created to be used as the content runtime. The name is just the host name and not the fully qualified host name.",
+  "description": "The host name of the virtual machine being created to be used as the Content Runtime. The name is just the host name and not the fully qualified host name.",
   "default": "ibm-content-runtime",
   "hidden": false,
   "label": "Content Runtime Host Name",
@@ -101,15 +105,15 @@
 {
   "name": "chef_version",
   "type": "string",
-  "description": "Stable version of Chef-Server to install.  Note: the installation package is OS dependent. This entry may contain an http://, https://, or file:// link to an installation package (.deb/.rpm).",
+  "description": "Stable version of Chef-Server to install.  The installation package is OS dependent. This entry may contain an http://, https://, or file:// link to an installation package (.deb/.rpm).",
   "default": "12.11.1",
-  "hidden": true,
-  "label": "Chef-Server Installation Version",
-  "group_name": "additional_settings",
+  "hidden": false,
+  "label": "Chef Server Installation Binary",
+  "group_name": "optional_offline",
   "secured": false,
   "system": false,
-  "required": true,
-  "immutable": true
+  "required": false,
+  "immutable": false
 },
 {
   "name": "ibm_sw_repo_user",
@@ -265,19 +269,6 @@
   "immutable": false
 },
 {
-  "name": "network_visibility",
-  "type": "string",
-  "description": "The network connection associated with the Content Runtime VM instance. If network visibility is private, connection must exist from the IBM Cloud Private to the network connection associated with the Content Runtime VM being created.",
-  "default": "public",
-  "hidden": false,
-  "label": "Network Visibility",
-  "group_name": "additional_settings",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": true
-},
-{
   "name": "ibm_pm_public_ssh_key_name",
   "type": "string",
   "description": "For Amazon and IBM clouds, the key must exist as a resource. For other provider types, the content is simply the name associated with the key.",
@@ -342,9 +333,22 @@
   "name": "template_timestamp_hidden",
   "type": "string",
   "description": "Internal automatically updated variable containing the Content Runtime template timestamp",
-  "default": "2017-10-16 18:59:35",
+  "default": "2017-11-30 14:41:57",
   "hidden": true,
   "label": "Template Timestamp",
+  "group_name": "additional_settings",
+  "secured": false,
+  "system": true,
+  "required": true,
+  "immutable": true
+},
+{
+  "name": "template_debug",
+  "type": "string",
+  "description": "Allow for the template parameters to be cached on the Content Runtime virtural machine for additional debug help in problem solving.",
+  "default": "false",
+  "hidden": true,
+  "label": "Template debug",
   "group_name": "additional_settings",
   "secured": false,
   "system": true,
@@ -655,6 +659,19 @@
   "regex": "^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)?$"
 },
 {
+  "name": "network_visibility",
+  "type": "string",
+  "description": "The network connection associated with the Content Runtime VM instance. If network visibility is private, connection must exist from the IBM Cloud Private to the network connection associated with the Content Runtime VM being created.",
+  "default": "public",
+  "hidden": false,
+  "label": "Network Visibility",
+  "group_name": "additional_settings",
+  "secured": false,
+  "system": false,
+  "required": true,
+  "immutable": true
+},
+{
   "name": "prereq_strictness",
   "type": "string",
   "description": "If set to strict, the prerequisite checker stops execution if one or more requirements is not installed. If set to lenient,  If set to lenient, the prerequisite checker proceeds to install any missing requirement.",
@@ -673,13 +690,65 @@
       "value": "strict",
       "label": "Strict"
     }]
+},
+{
+  "name": "installer_docker",
+  "type": "string",
+  "description": "Optional file location of a docker .deb/.rpm file to be installed on the system",
+  "default": "",
+  "hidden": true,
+  "label": "Docker installation file",
+  "group_name": "optional_offline",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
+},
+{
+  "name": "installer_docker_compose",
+  "type": "string",
+  "description": "Optional file location of a Docker Compose executable file to be installed on the system",
+  "default": "",
+  "hidden": true,
+  "label": "Docker Compose installation file",
+  "group_name": "optional_offline",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
+},
+{
+  "name": "sw_repo_image",
+  "type": "string",
+  "description": "Optional file location of the Software Repository Docker image to be loaded to the system",
+  "default": "",
+  "hidden": true,
+  "label": "Software Repository Docker image location",
+  "group_name": "optional_offline",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
+},
+{
+  "name": "pm_image",
+  "type": "string",
+  "description": "Optional file location of the Pattern Manager Docker image to be loaded to the system",
+  "default": "",
+  "hidden": true,
+  "label": "Pattern Manager Docker image location",
+  "group_name": "optional_offline",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
 }
 ],
 "template_output_params":[
 {
   "name": "runtime_hostname",
   "type": "string",
-  "description": "The host name of the virtual machine being created to be used as the content runtime. The name is just the host name and not the fully qualified host name.",
+  "description": "The host name of the virtual machine being created to be used as the Content Runtime. The name is just the host name and not the fully qualified host name.",
   "hidden": false,
   "label": "Content Runtime Host Name",
   "group_name": "content_template_output",
@@ -740,14 +809,14 @@
 {
   "name": "chef_version",
   "type": "string",
-  "description": "Stable version of Chef-Server to install.  Note: the installation package is OS dependent. This entry may contain an http://, https://, or file:// link to an installation package (.deb/.rpm).",
-  "hidden": true,
-  "label": "Chef-Server Installation Version",
+  "description": "Stable version of Chef-Server to install.  The installation package is OS dependent. This entry may contain an http://, https://, or file:// link to an installation package (.deb/.rpm).",
+  "hidden": false,
+  "label": "Chef Server Installation Binary",
   "group_name": "content_template_output",
   "secured": false,
   "system": false,
-  "required": true,
-  "immutable": true
+  "required": false,
+  "immutable": false
 },
 {
   "name": "ibm_sw_repo_user",
@@ -895,18 +964,6 @@
   "immutable": false
 },
 {
-  "name": "network_visibility",
-  "type": "string",
-  "description": "The network connection associated with the Content Runtime VM instance. If network visibility is private, connection must exist from the IBM Cloud Private to the network connection associated with the Content Runtime VM being created.",
-  "hidden": false,
-  "label": "Network Visibility",
-  "group_name": "content_template_output",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": true
-},
-{
   "name": "ibm_pm_public_ssh_key_name",
   "type": "string",
   "description": "For Amazon and IBM clouds, the key must exist as a resource. For other provider types, the content is simply the name associated with the key.",
@@ -973,6 +1030,18 @@
   "description": "Internal automatically updated variable containing the Content Runtime template timestamp",
   "hidden": true,
   "label": "Template Timestamp",
+  "group_name": "content_template_output",
+  "secured": false,
+  "system": true,
+  "required": true,
+  "immutable": true
+},
+{
+  "name": "template_debug",
+  "type": "string",
+  "description": "Allow for the template parameters to be cached on the Content Runtime virtural machine for additional debug help in problem solving.",
+  "hidden": true,
+  "label": "Template debug",
   "group_name": "content_template_output",
   "secured": false,
   "system": true,
@@ -1262,6 +1331,18 @@
   "regex": "^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)?$"
 },
 {
+  "name": "network_visibility",
+  "type": "string",
+  "description": "The network connection associated with the Content Runtime VM instance. If network visibility is private, connection must exist from the IBM Cloud Private to the network connection associated with the Content Runtime VM being created.",
+  "hidden": false,
+  "label": "Network Visibility",
+  "group_name": "content_template_output",
+  "secured": false,
+  "system": false,
+  "required": true,
+  "immutable": true
+},
+{
   "name": "prereq_strictness",
   "type": "string",
   "description": "If set to strict, the prerequisite checker stops execution if one or more requirements is not installed. If set to lenient,  If set to lenient, the prerequisite checker proceeds to install any missing requirement.",
@@ -1277,12 +1358,60 @@
     }, {
       "label": "Strict"
     }]
+},
+{
+  "name": "installer_docker",
+  "type": "string",
+  "description": "Optional file location of a docker .deb/.rpm file to be installed on the system",
+  "hidden": true,
+  "label": "Docker installation file",
+  "group_name": "content_template_output",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
+},
+{
+  "name": "installer_docker_compose",
+  "type": "string",
+  "description": "Optional file location of a Docker Compose executable file to be installed on the system",
+  "hidden": true,
+  "label": "Docker Compose installation file",
+  "group_name": "content_template_output",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
+},
+{
+  "name": "sw_repo_image",
+  "type": "string",
+  "description": "Optional file location of the Software Repository Docker image to be loaded to the system",
+  "hidden": true,
+  "label": "Software Repository Docker image location",
+  "group_name": "content_template_output",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
+},
+{
+  "name": "pm_image",
+  "type": "string",
+  "description": "Optional file location of the Pattern Manager Docker image to be loaded to the system",
+  "hidden": true,
+  "label": "Pattern Manager Docker image location",
+  "group_name": "content_template_output",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
 }
 ,
 {
   "name": "ip_address",
   "type": "string",
-  "description": "IP address of the content runtime.",
+  "description": "IP address of the Content Runtime.",
   "hidden": false,
   "label": "IP Address",
   "group_name": "content_template_output",

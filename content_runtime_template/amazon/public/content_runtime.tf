@@ -30,25 +30,14 @@
  variable "docker_ee_repo" { type = "string" }
  variable "template_timestamp_hidden" { type = "string" }
  variable "template_debug" { type = "string" }
- variable "vsphere_datacenter" { type = "string" }
- variable "vsphere_cluster" { type = "string" }
- variable "vsphere_folder" { type = "string" }
- variable "vsphere_datastore" { type = "string" }
- variable "runtime_domain" { type = "string" }
- variable "cores" { type = "string" }
- variable "memory" { type = "string" }
+ variable "aws_userid" { type = "string" }
  variable "nfs_mount" { type = "string" }
- variable "vsphere_dns" { type = "list" }
- variable "disk1_template" { type = "string" }
- variable "disk2_name" { type = "string" }
- variable "disk2_size" { type = "string" }
- variable "network_label" { type = "string" }
+ variable "aws_private_ip" { type = "string" }
  variable "ipv4_address" { type = "string" }
- variable "ipv4_gateway" { type = "string" }
- variable "ipv4_prefix_length" { type = "string" }
- variable "vmware_image_ssh_user" { type = "string" }
- variable "vmware_image_ssh_password" { type = "string" }
- variable "vmware_image_ssh_private_key" { type = "string" }
+ variable "aws_security_group" { type = "string" }
+ variable "aws_subnet" { type = "string" }
+ variable "aws_instance_type" { type = "string" }
+ variable "aws_region" { type = "string" }
  variable "network_visibility" { type = "string" }
  variable "prereq_strictness" { type = "string" }
  variable "installer_docker" { type = "string" }
@@ -58,50 +47,67 @@
 
 ### End Input Section
 
-provider "vsphere" {
-  version = "~> 0.4"
-  allow_unverified_ssl = true
+provider "tls" {
+  version = "~> 1.0"
 }
 
-resource "vsphere_virtual_machine" "singlenode" {
-  name = "${var.runtime_hostname}"
-  vcpu = "${var.cores}"
-  memory = "${var.memory}"
-  domain = "${var.runtime_domain}"
-  datacenter = "${var.vsphere_datacenter}"
-  dns_servers = "${var.vsphere_dns}"
-  cluster = "${var.vsphere_cluster}"
-  folder = "${var.vsphere_folder}"
 
+resource "tls_private_key" "ssh" {
+  algorithm = "RSA"
+}
 
-  network_interface {
-    label = "${var.network_label}"
-    ipv4_address = "${var.ipv4_address}"
-    ipv4_gateway = "${var.ipv4_gateway}"
-    ipv4_prefix_length = "${var.ipv4_prefix_length}"
+resource "aws_key_pair" "internal_public_key" {
+  public_key = "${tls_private_key.ssh.public_key_openssh}"
+}
+
+data "aws_ami" "ubuntu_1404" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-*"]
   }
 
-  disk {
-    # template or vmdk
-    template = "${var.disk1_template}"
-    datastore="${var.vsphere_datastore}"
-    # size = "${var.disk1_size}"
-    # name = "${var.disk1_name}"
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
   }
 
-  disk {
-    size = "${var.disk2_size}"
-    name = "${var.disk2_name}"
-    datastore="${var.vsphere_datastore}"
-  }
+  owners = ["099720109477"] # Canonical
+}
 
-  # Set the ssh connection using the private generted ssh key
-  connection {
-    type = "ssh"
-    user = "${var.vmware_image_ssh_user}"
-    password = "${var.vmware_image_ssh_password}"
-    private_key = "${ length(var.vmware_image_ssh_private_key) > 0 ? base64decode(var.vmware_image_ssh_private_key) : var.vmware_image_ssh_private_key}"
+
+provider "aws" {
+  version    = "~> 1.2"
+  region     = "${var.aws_region}"
+}
+
+resource "aws_instance" "singlenode" {
+  ami = "${data.aws_ami.ubuntu_1404.id}"
+  instance_type = "${var.aws_instance_type}"
+  key_name = "${aws_key_pair.internal_public_key.id}"
+  vpc_security_group_ids = ["${var.aws_security_group}"]
+  subnet_id = "${var.aws_subnet}"
+  private_ip = "${var.aws_private_ip}"
+  associate_public_ip_address = "${var.network_visibility == "public" ? "true" : "false"}"
+  tags {
+    Name = "${var.runtime_hostname}"
   }
+  # Root disk of 25GB
+  root_block_device {
+           volume_size = 25
+  }
+  # Mounted disk of 100GB
+  ebs_block_device{
+         volume_size = 100
+         device_name = "/dev/xvdc"
+  }
+  # see if this is the location for running the remote command
+    connection {
+        type = "ssh"
+        user = "${var.aws_userid}"
+	      private_key = "${tls_private_key.ssh.private_key_pem}"
+    }
 
   provisioner "remote-exec" {
     inline = [
@@ -1741,25 +1747,34 @@ EndOfFile
         "bash -c \"./advanced-content-runtime/launch-docker-compose.sh ${var.network_visibility} --docker_registry_token='${var.docker_registry_token}' --nfs_mount_point='${var.nfs_mount}' --software_repo_user='${var.ibm_sw_repo_user}' --software_repo_pass='${var.ibm_sw_repo_password}' --im_repo_user='${var.ibm_im_repo_user_hidden}' --im_repo_pass='${var.ibm_im_repo_password_hidden}'  --chef_host=chef-server --software_repo=software-repo --pattern_mgr=pattern --ibm_contenthub_git_access_token='${var.ibm_contenthub_git_access_token}' --ibm_contenthub_git_host='${var.ibm_contenthub_git_host}' --ibm_contenthub_git_organization='${var.ibm_contenthub_git_organization}' --ibm_openhub_git_organization='${var.ibm_openhub_git_organization}' --chef_org='${var.chef_org}' --chef_admin='${var.chef_admin}' --docker_registry='${var.docker_registry}' --chef_version=${var.chef_version} --ibm_pm_access_token='${var.ibm_pm_access_token}' --ibm_pm_admin_token='${var.ibm_pm_admin_token}' --camc-sw-repo_version='${var.docker_registry_camc_sw_repo_version}' --docker_ee_repo='${var.docker_ee_repo}' --camc-pattern-manager_version='${var.docker_registry_camc_pattern_manager_version}' --docker_configuration=single-node --ibm_pm_public_ssh_key_name='${var.ibm_pm_public_ssh_key_name}' --ibm_pm_private_ssh_key='${var.ibm_pm_private_ssh_key}' --ibm_pm_public_ssh_key='${var.ibm_pm_public_ssh_key}' --user_public_ssh_key='${var.user_public_ssh_key}' --prereq_strictness='${var.prereq_strictness}' --ip_address='${var.ipv4_address}' --template_timestamp='${var.template_timestamp_hidden}' --installer_docker='${var.installer_docker}' --installer_docker_compose='${var.installer_docker_compose}' --sw_repo_image='${var.sw_repo_image}' --pm_image='${var.pm_image}' --template_debug='${var.template_debug}'\""
       ]
    }
-}
+} # End of Resource
 
-### VMware output variables
+
+### AWS output variables
+  output "private_key" {
+  value = "${tls_private_key.ssh.private_key_pem}" }
+  output "public_key" {
+  value = "${tls_private_key.ssh.public_key_pem}" }
   output "ip_address" {
-  value = "${var.ipv4_address}" }
+  value = "${var.network_visibility == "public" ? "${aws_instance.singlenode.public_ip}" : "${aws_instance.singlenode.private_ip}"}" }
   output "ibm_sw_repo" {
-  value = "https://${var.ipv4_address}:9999" }
+  value = "https://${var.network_visibility == "public" ? "${aws_instance.singlenode.public_ip}" : "${aws_instance.singlenode.private_ip}"}:9999" }
   output "ibm_im_repo" {
-  value = "https://${var.ipv4_address}:9999/IMRepo" }
+  value = "https://${var.network_visibility == "public" ? "${aws_instance.singlenode.public_ip}" : "${aws_instance.singlenode.private_ip}"}:9999/IMRepo" }
   output "ibm_pm_service" {
-  value = "https://${var.ipv4_address}:5443" }
+  value = "https://${var.network_visibility == "public" ? "${aws_instance.singlenode.public_ip}" : "${aws_instance.singlenode.private_ip}"}:5443" }
+  output "runtime_domain" {
+  value = "${var.network_visibility == "public" ? replace("${aws_instance.singlenode.public_dns}", "/^[^.]*./", "") : replace("${aws_instance.singlenode.private_dns}", "/^[^.]*./", "")}" }
+  output "aws_ami" {
+  value = "${data.aws_ami.ubuntu_1404.id}" }
   output "ibm_im_repo_user" {
   value = "${var.ibm_sw_repo_user}" }
   output "ibm_im_repo_password" {
   value = "${var.ibm_sw_repo_password}" }
   output "template_timestamp" {
-  value = "2017-11-30 14:41:57" }
-### End VMware output variables
+  value = "2017-11-30 14:41:48" }
 
+### End AWS output variables
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
 output "docker_registry_token" { value = "${var.docker_registry_token}"}
 output "docker_registry" { value = "${var.docker_registry}"}
@@ -1785,25 +1800,14 @@ output "user_public_ssh_key" { value = "${var.user_public_ssh_key}"}
 output "docker_ee_repo" { value = "${var.docker_ee_repo}"}
 output "template_timestamp_hidden" { value = "${var.template_timestamp_hidden}"}
 output "template_debug" { value = "${var.template_debug}"}
-output "vsphere_datacenter" { value = "${var.vsphere_datacenter}"}
-output "vsphere_cluster" { value = "${var.vsphere_cluster}"}
-output "vsphere_folder" { value = "${var.vsphere_folder}"}
-output "vsphere_datastore" { value = "${var.vsphere_datastore}"}
-output "runtime_domain" { value = "${var.runtime_domain}"}
-output "cores" { value = "${var.cores}"}
-output "memory" { value = "${var.memory}"}
+output "aws_userid" { value = "${var.aws_userid}"}
 output "nfs_mount" { value = "${var.nfs_mount}"}
-output "vsphere_dns" { value = "${var.vsphere_dns}"}
-output "disk1_template" { value = "${var.disk1_template}"}
-output "disk2_name" { value = "${var.disk2_name}"}
-output "disk2_size" { value = "${var.disk2_size}"}
-output "network_label" { value = "${var.network_label}"}
+output "aws_private_ip" { value = "${var.aws_private_ip}"}
 output "ipv4_address" { value = "${var.ipv4_address}"}
-output "ipv4_gateway" { value = "${var.ipv4_gateway}"}
-output "ipv4_prefix_length" { value = "${var.ipv4_prefix_length}"}
-output "vmware_image_ssh_user" { value = "${var.vmware_image_ssh_user}"}
-output "vmware_image_ssh_password" { value = "${var.vmware_image_ssh_password}"}
-output "vmware_image_ssh_private_key" { value = "${var.vmware_image_ssh_private_key}"}
+output "aws_security_group" { value = "${var.aws_security_group}"}
+output "aws_subnet" { value = "${var.aws_subnet}"}
+output "aws_instance_type" { value = "${var.aws_instance_type}"}
+output "aws_region" { value = "${var.aws_region}"}
 output "network_visibility" { value = "${var.network_visibility}"}
 output "prereq_strictness" { value = "${var.prereq_strictness}"}
 output "installer_docker" { value = "${var.installer_docker}"}

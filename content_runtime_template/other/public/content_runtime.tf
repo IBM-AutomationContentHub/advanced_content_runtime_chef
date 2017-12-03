@@ -22,20 +22,29 @@
  variable "chef_admin" { type = "string" }
  variable "ibm_pm_access_token" { type = "string" }
  variable "ibm_pm_admin_token" { type = "string" }
- variable "network_visibility" { type = "string" }
  variable "ibm_pm_public_ssh_key_name" { type = "string" }
  variable "ibm_pm_private_ssh_key" { type = "string" }
  variable "ibm_pm_public_ssh_key" { type = "string" }
  variable "user_public_ssh_key" { type = "string" }
  variable "docker_ee_repo" { type = "string" }
  variable "template_timestamp_hidden" { type = "string" }
+ variable "template_debug" { type = "string" }
  variable "nfs_mount" { type = "string" }
  variable "ipv4_address" { type = "string" }
  variable "vm_image_ssh_user" { type = "string" }
  variable "vm_image_ssh_password" { type = "string" }
  variable "vm_image_ssh_private_key" { type = "string" }
+ variable "network_visibility" { type = "string" }
  variable "prereq_strictness" { type = "string" }
+ variable "installer_docker" { type = "string" }
+ variable "installer_docker_compose" { type = "string" }
+ variable "sw_repo_image" { type = "string" }
+ variable "pm_image" { type = "string" }
 ### End Input
+
+provider "null" {
+  version = "~> 0.1"
+}
 
 resource "null_resource"  "singlenode" {
   connection {
@@ -60,7 +69,7 @@ provisioner "file" {
 #
 ######################################################################################
 # Script to check the requirements necessary for an installation
-# # Usage: ./prereq-check-install.sh MODE(strict/lenient) CHEF_VERSION_OR_URL PM_PUBLIC_KEY PM_PRIVATE_KEY DOCKER_EE_REPO
+# # Usage: ./prereq-check-install.sh -m MODE(strict/lenient) -c CHEF_VERSION_OR_URL -u PM_PUBLIC_KEY -r PM_PRIVATE_KEY -e DOCKER_EE_REPO -o DOCKER_COMPOSE_FILE -d DOCKE_FILE
 ######################################################################################
 RESULT=0
 
@@ -68,7 +77,7 @@ RESULT=0
 
 # Declare the default chef and docker compose versions for their installations
 CHEF_VERSION=12.11.1
-DOCKER_COMPOSE_VERSION=1.11.2
+DOCKER_COMPOSE_VERSION=1.17.1
 
 function wait_apt_lock()
 {
@@ -128,31 +137,23 @@ fi
 # Check for the cloud provider
 CLOUD_PROVIDER=$(sudo dmidecode -s bios-version)
 
-echo "[*] Checking internet connection"
-OFFLINE="false"
-if [[ `ping -c 3 -w 10 www.ibm.com | egrep "0 received,"` ]]; then
-  OFFLINE="true"
-  echo "[*] The virtual machine is not connected to the internet. Offline mode activated."
+echo "[*] Updating packages"
+# Check if the script is being run as root
+if [[ $PLATFORM == *"ubuntu"* ]]; then
+  wait_apt_lock
+  PACKAGE_MANAGER=apt-get
+  if { sudo -n apt-get -qqy update 2>&1 || echo E: update failed; } | grep -q '^[W]:'; then
+    echo "[ERROR] There was an error obtaining the latest packages"
+  fi
 else
-  OFFLINE="false"
+  PACKAGE_MANAGER=yum
+  if { sudo -n yum -y update 2>&1 || echo E: update failed; } | grep -q '^[W]:'; then
+    echo "[ERROR] There was an error obtaining the latest packages"
+  fi
 fi
-
-if [[ $OFFLINE == *"false"* ]]; then
-  echo "[*] Updating packages"
-  # Check if the script is being run as root
-  if [[ $PLATFORM == *"ubuntu"* ]]; then
-    wait_apt_lock 
-    PACKAGE_MANAGER=apt-get
-    sudo -n apt-get -qqy update
-  else
-    PACKAGE_MANAGER=yum
-    sudo -n yum -y update
-  fi
-
-  if [ $? -ne "0" ]; then
-    echo "[ERROR] This script requires $PACKAGE_MANAGER permissions for executing"
-    exit 1
-  fi
+if [ $? -ne "0" ]; then
+  echo "[ERROR] This script requires $PACKAGE_MANAGER permissions for executing"
+  exit 1
 fi
 
 # Check if there is at least 1GB of disk available
@@ -162,21 +163,33 @@ if [ $FREE_MEM -lt 5242880 ]; then # 1GB = 1024 * 1024
   exit 1
 fi
 
+# Get script parameters
+while [[ $${1:0:1} == - ]]; do
+  [[ $1 =~ ^-m|--mode ]] && { PARAM_MODE="$${2}"; shift 2; continue; };
+  [[ $1 =~ ^-c|--chef ]] && { PARAM_CHEF="$${2}"; shift 2; continue; };
+  [[ $1 =~ ^-u|--public ]] && { PARAM_PUBLIC_KEY="$${2}"; shift 2; continue; };
+  [[ $1 =~ ^-r|--private ]] && { PARAM_PRIVATE_KEY="$${2}"; shift 2; continue; };
+  [[ $1 =~ ^-e|--dockeree ]] && { PARAM_DOCKEREE="$${2}"; shift 2; continue; };
+  [[ $1 =~ ^-o|--compose ]] && { PARAM_DOCKER_COMPOSE="$${2}"; shift 2; continue; };
+  [[ $1 =~ ^-d|--docker ]] && { PARAM_DOCKER="$${2}"; shift 2; continue; };
+  break;
+done
+
 # Check if strict mode is enabled, if it is, the program will not attempt to install requirements
 MODE="lenient"
-if [[ $1 == *"strict"* ]]; then
+if [[ $PARAM_MODE == *"strict"* ]]; then
   MODE="strict"
   echo "[*] Strict mode enabled"
 fi
 
 # Get chef's URL from parameter
 URL_REGEX='(https?|ftp|file)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]'
-if [ -n "$2" ]; then
-  if [[ $2 =~ $URL_REGEX ]]; then
-    echo "[*] Chef URL was provided: $2"
-    CHEF_URL=$2
+if [ -n $PARAM_CHEF ]; then
+  if [[ $PARAM_CHEF =~ $URL_REGEX ]]; then
+    echo "[*] Chef URL was provided: $PARAM_CHEF"
+    CHEF_URL=$PARAM_CHEF
   else
-    CHEF_VERSION=$2
+    CHEF_VERSION=$PARAM_CHEF
     if [[ $PLATFORM == *"ubuntu"* ]]; then
     		CHEF_URL=https://packages.chef.io/files/stable/chef-server/$CHEF_VERSION/ubuntu/$PLATFORM_VERSION/chef-server-core_$CHEF_VERSION-1_amd64.deb
     else
@@ -188,26 +201,29 @@ if [ -n "$2" ]; then
   fi
 fi
 
-# Verify the provided private ($4) and public ($3) keys match
-PM_PUBLIC_KEY=`echo $3 | head -n1 | cut -d " " -f2`
+if [ ! -e `dirname $0`/.advanced-runtime-config/sshkeyverified ] ; then
+  # Verify the provided private and public keys match
+  PM_PUBLIC_KEY=`echo $PARAM_PUBLIC_KEY | head -n1 | cut -d " " -f2`
 
-echo $4 | base64 --decode > key.decoded
-chmod 600 key.decoded
-ssh-keygen -p -P '' -N '' -f key.decoded > /dev/null
+  echo $PARAM_PRIVATE_KEY | base64 --decode > key.decoded
+  chmod 600 key.decoded
+  ssh-keygen -p -P '' -N '' -f key.decoded > /dev/null
 
-if [ $? -gt 0 ]; then
- echo "[ERROR] The provided encoded private key contains a password. Pattern Manager requires the use of a passwordless private key."
- exit 1
+  if [ $? -gt 0 ]; then
+    echo "[ERROR] The provided encoded private key contains a password. Pattern Manager requires the use of a passwordless private key."
+    exit 1
+  fi
+
+  PM_PRIVATE_KEY=`ssh-keygen -y -f key.decoded | head -n1 | cut -d " " -f2`
+  if [[ $PM_PUBLIC_KEY == $PM_PRIVATE_KEY ]]; then
+    echo "[*] The provided SSH keys for Pattern Manager were validated succesfully."
+  else
+    echo "[ERROR] The provided SSH public and private keys for Pattern Manager do not match, please provide a matching pair of keys."
+    exit 1;
+  fi
+  rm -rf key.decoded
+  touch `dirname $0`/.advanced-runtime-config/sshkeyverified
 fi
-
-PM_PRIVATE_KEY=`ssh-keygen -y -f key.decoded | head -n1 | cut -d " " -f2`
-if [[ $PM_PUBLIC_KEY == $PM_PRIVATE_KEY ]]; then
-  echo "[*] The provided SSH keys for Pattern Manager were validated succesfully."
-else
-  echo "[ERROR] The provided SSH public and private keys for Pattern Manager do not match, please provide a matching pair of keys."
-  exit 1;
-fi
-rm -rf key.decoded
 
 # Verify the machine's hostname is in lower case
 h=`hostname`
@@ -228,12 +244,12 @@ fi
 
 # Get Docker EE repo URL
 if ! command_exists docker; then
-  if [ -n "$5" ]; then
-    DOCKER_EE_REPO=$5
-    echo "[*] Identified Docker EE repository: $5"
+  if [ -n $PARAM_DOCKEREE ]; then
+    DOCKER_EE_REPO=$PARAM_DOCKEREE
+    echo "[*] Identified Docker EE repository: $PARAM_DOCKEREE"
   else
     echo "[*] No Docker EE repository provided"
-    if [[ $PLATFORM == *"rhel"* ]]; then
+    if [[ $PLATFORM == *"rhel"* ]] && [ -n $PARAM_DOCKER ]; then
       echo "[ERROR] Docker CE for Red Hat Enterprise is not supported, please provide a valid Docker EE repository URL"
       exit 1
     fi
@@ -282,6 +298,29 @@ function check_command_and_install() {
   fi
 }
 
+# Install a deb or rpm file from a provided binary file
+# install_binary NAME URL
+function install_binary() {
+  if [[ $2 =~ $URL_REGEX ]]; then
+    echo "[*] Installing $1 from the provided binary file: $2"
+    download_file $1 $2 $1
+    if [[ $PLATFORM == *"ubuntu"* ]]; then
+      sudo dpkg -i $1
+    else
+      if [[ $PLATFORM == *"rhel"* ]] || [[ $PLATFORM == *"centos"* ]]; then
+      	sudo rpm -ivh $1
+      fi
+    fi
+    if [ $? -ne "0" ]; then
+      echo "[ERROR] There was an error installing $1 from the provided binary file"
+      exit 1
+    fi
+  else
+    echo "[ERROR] There was an error installing $1 from the provided URL: $2"
+    exit 1
+  fi
+}
+
 function install_chef() {
   # pull the checksum from the install download
   CHEFCHECKSUM_URL=$CHEF_URL.sha1
@@ -307,55 +346,60 @@ function install_chef() {
 }
 
 function install_docker() {
-  # Install Docker EE if the repo was provided
-  if [[ -n $DOCKER_EE_REPO ]]; then
-    if [[ $PLATFORM == *"ubuntu"* ]]; then
-      wait_apt_lock
-      if [[ $PLATFORM_VERSION == *"14.04"* ]]; then
-        sudo apt-get -y install linux-image-extra-$(uname -r) linux-image-extra-virtual
-      fi
-      sudo apt-get -y install apt-transport-https ca-certificates software-properties-common
-      curl -fsSL $DOCKER_EE_REPO/ubuntu/gpg | sudo apt-key add -
-      sudo add-apt-repository "deb [arch=amd64] "$DOCKER_EE_REPO"/ubuntu $(lsb_release -cs) stable-17.03"
-      sudo apt-get -y update
-      sudo apt-get -y install docker-ee
-    else
-      if [[ $PLATFORM == *"rhel"* ]] || [[ $PLATFORM == *"centos"* ]]; then
-        # Configure the repository
-        sudo sh -c 'echo "'$DOCKER_EE_REPO'/'$PLATFORM'" > /etc/yum/vars/dockerurl'
-        sudo sh -c 'echo "'$MAIN_VERSION'" > /etc/yum/vars/dockerosversion'
-        sudo yum install -y yum-utils device-mapper-persistent-data lvm2
-        sudo yum-config-manager --add-repo $DOCKER_EE_REPO/rhel/docker-ee.repo
-        # Install Docker EE
-        sudo yum makecache fast
-        if [[ $CLOUD_PROVIDER = *"amazon"* ]]; then
-          sudo yum -y install docker-ee --enablerepo=rhui-REGION-rhel-server-extras
-        else
-          sudo yum -y install docker-ee --enablerepo=rhel-7-server-extras-rpms
-          if [ $? -ne "0" ]; then
-            echo "[ERROR] There was an error enabling the rhel7-server-extras repository. Attempting installation without it."
-            sudo yum -y install docker-ee
+  # Install
+  if [[ -n $PARAM_DOCKER ]]; then
+    install_binary "docker" $PARAM_DOCKER
+  else
+    # Install Docker EE if the repo was provided
+    if [[ -n $DOCKER_EE_REPO ]]; then
+      if [[ $PLATFORM == *"ubuntu"* ]]; then
+        wait_apt_lock
+        if [[ $PLATFORM_VERSION == *"14.04"* ]]; then
+          sudo apt-get -y install linux-image-extra-$(uname -r) linux-image-extra-virtual
+        fi
+        sudo apt-get -y install apt-transport-https ca-certificates software-properties-common
+        curl -fsSL $DOCKER_EE_REPO/ubuntu/gpg | sudo apt-key add -
+        sudo add-apt-repository "deb [arch=amd64] "$DOCKER_EE_REPO"/ubuntu $(lsb_release -cs) stable-17.03"
+        sudo apt-get -y update
+        sudo apt-get -y install docker-ee
+      else
+        if [[ $PLATFORM == *"rhel"* ]] || [[ $PLATFORM == *"centos"* ]]; then
+          # Configure the repository
+          sudo sh -c 'echo "'$DOCKER_EE_REPO'/'$PLATFORM'" > /etc/yum/vars/dockerurl'
+          sudo sh -c 'echo "'$MAIN_VERSION'" > /etc/yum/vars/dockerosversion'
+          sudo yum install -y yum-utils device-mapper-persistent-data lvm2
+          sudo yum-config-manager --add-repo $DOCKER_EE_REPO/rhel/docker-ee.repo
+          # Install Docker EE
+          sudo yum makecache fast
+          if [[ $CLOUD_PROVIDER = *"amazon"* ]]; then
+            sudo yum -y install docker-ee --enablerepo=rhui-REGION-rhel-server-extras
+          else
+            sudo yum -y install docker-ee --enablerepo=rhel-7-server-extras-rpms
+            if [ $? -ne "0" ]; then
+              echo "[ERROR] There was an error enabling the rhel7-server-extras repository. Attempting installation without it."
+              sudo yum -y install docker-ee
+            fi
           fi
         fi
       fi
-    fi
-    if [ $? -ne "0" ]; then
-      echo "[ERROR] There was an error installing Docker EE from the provided repository"
-      echo "[ERROR] Repo: $DOCKER_EE_REPO"
-      exit 1
-    fi
-  else # Otherwise install CE in supported platforms
-    if [[ $PLATFORM == *"ubuntu"* ]] || [[ $PLATFORM == *"centos"* ]]; then
-        [[ $PLATFORM == *"ubuntu"* ]] && wait_apt_lock
-        curl -fsSL https://get.docker.com/ | sudo sh
-        if [ $? -ne "0" ]; then # Retry on failure
-            [[ $PLATFORM == *"ubuntu"* ]] && wait_apt_lock
-            curl -fsSL https://get.docker.com/ | sudo sh
-        fi  
-    fi
-    if [ $? -ne "0" ]; then
-      echo "[ERROR] There was an error installing Docker CE"
-      exit 1
+      if [ $? -ne "0" ]; then
+        echo "[ERROR] There was an error installing Docker EE from the provided repository"
+        echo "[ERROR] Repo: $DOCKER_EE_REPO"
+        exit 1
+      fi
+    else # Otherwise install CE in supported platforms or install from provided binary
+      if [[ $PLATFORM == *"ubuntu"* ]] || [[ $PLATFORM == *"centos"* ]]; then
+          [[ $PLATFORM == *"ubuntu"* ]] && wait_apt_lock
+          curl -fsSL https://get.docker.com/ | sudo sh
+          if [ -z "`which docker`" ]; then # retry failed install, could be download issues
+              [[ $PLATFORM == *"ubuntu"* ]] && wait_apt_lock
+              curl -fsSL https://get.docker.com/ | sudo sh
+          fi
+      fi
+      if [ $? -ne "0" ]; then
+        echo "[ERROR] There was an error installing Docker CE"
+        exit 1
+      fi
     fi
   fi
   # Start docker as a service on reboot
@@ -376,8 +420,13 @@ function check_firewall {
 }
 
 function install_docker_compose {
+  if [[ -n $PARAM_DOCKER_COMPOSE ]]; then
+    sudo curl -o /usr/local/bin/docker-compose -L $PARAM_DOCKER_COMPOSE
+    sudo chmod +x /usr/local/bin/docker-compose
+  else
    sudo curl -o /usr/local/bin/docker-compose -L https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_VERSION/docker-compose-`uname -s`-`uname -m`
    sudo chmod +x /usr/local/bin/docker-compose
+  fi
 }
 
 echo "[*] Verifying requirements"
@@ -447,6 +496,9 @@ verify_docker() {
     echo "[SUCCESS] Docker is currently running" | tee -a $LOG_FILE
   fi
   sudo cat /etc/docker/daemon.json >> $LOG_FILE 
+  echo "[INFORMATIONAL] `docker -v`" | tee -a $LOG_FILE
+  echo "[INFORMATIONAL] `docker-compose -v`" | tee -a $LOG_FILE
+
 }
 
 verify_docker_service() {
@@ -467,7 +519,7 @@ verify_containers() {
   # Verify pattern manager container is up
   if [ "$(sudo docker ps | grep $PATTERN_MANAGER_CONTAINER)" ]; then
     echo "[SUCCESS] The Pattern Manager image is running correctly" | tee -a $LOG_FILE
-    sudo docker inspect --format='{{.Image}}' $PATTERN_MANAGER_CONTAINER | tee -a $LOG_FILE
+    echo "[INFORMATIONAL] `sudo docker inspect --format='{{.Image}}' $PATTERN_MANAGER_CONTAINER`" | tee -a $LOG_FILE
   else
     echo "[ERROR] The Pattern Manager image is currently not running" | tee -a $LOG_FILE
     echo "$(sudo docker ps | grep $PATTERN_MANAGER_CONTAINER)" >> $LOG_FILE
@@ -480,7 +532,7 @@ verify_containers() {
   # Verify repo container is up
   if [ "$(sudo docker ps | grep $SW_REPO_CONTAINER)" ]; then
     echo "[SUCCESS] The Software Repository image is running correctly" | tee -a $LOG_FILE
-    sudo docker inspect --format='{{.Image}}' $SW_REPO_CONTAINER | tee -a $LOG_FILE
+    echo "[INFORMATIONAL] `sudo docker inspect --format='{{.Image}}' $SW_REPO_CONTAINER`" | tee -a $LOG_FILE
   else
     echo "[ERROR] The Software Repository image is currently not running" | tee -a $LOG_FILE
     echo "$(sudo docker ps | grep $SW_REPO_CONTAINER)" >> $LOG_FILE
@@ -522,11 +574,15 @@ verify_sw_repo() {
   if [ $SW_CHECK == 403 ]; then
     echo "[SUCCESS] Connection to the Software Repo image was established correctly" | tee -a $LOG_FILE
   else
-    echo "[ERROR] Could not establish connection to the Software Repo image" | tee -a $LOG_FILE
-    echo "curl -s --write-out %{http_code} --output sw_repo.out -k $SW_USER:$SW_PASS -X GET https://localhost:9999" >> $LOG_FILE
-    curl -s --write-out %{http_code} --output sw_repo.out -k $SW_USER:$SW_PASS -X GET https://localhost:9999 | tee -a $LOG_FILE
-    log_firewall
-    exit 1
+    if [[ $SW_CHECK == 401 ]] && [[ -z "$SW_PASS" ]] ; then	
+      echo "[SUCCESS] Connection to the Software Repo image was rejected correctly" | tee -a $LOG_FILE
+    else
+      echo "[ERROR] Could not establish connection to the Software Repo image" | tee -a $LOG_FILE
+      echo "curl -s --write-out %{http_code} --output sw_repo.out -k $SW_USER:$SW_PASS -X GET https://localhost:9999" >> $LOG_FILE
+      curl -s --write-out %{http_code} --output sw_repo.out -k $SW_USER:$SW_PASS -X GET https://localhost:9999 | tee -a $LOG_FILE
+      log_firewall
+      exit 1
+    fi
   fi
 }
 
@@ -558,6 +614,7 @@ verify_chef() {
     sleep 1
   done
   echo "[SUCCESS] Chef server nodes are running correctly" | tee -a $LOG_FILE
+  echo "[INFORMATIONAL] `head -n1 /opt/opscode/version-manifest.txt`"
 }
 
 verify_cookbooks() {
@@ -649,7 +706,8 @@ function echo_log_file_locations()
 TIMESTAMP=`date '+%Y-%m-%d %H:%M:%S'`
 echo "[*] Verifying Content Runtime installation, started on $TIMESTAMP" | tee -a $LOG_FILE
 echo "[*] Content Runtime template version: `cat $PARAM_FILE | egrep 'template_timestamp' | cut -f2 -d'='`"
-echo "[*] Hostname : `hostname`, Domain : `hostname -d`" | tee -a $LOG_FILE
+echo "[INFORMATIONAL] Hostname : `hostname`, Domain : `hostname -d`" | tee -a $LOG_FILE
+echo "[INFORMATIONAL] `cat /etc/*release | egrep PRETTY | cut -f2 -d'"'`" | tee -a $LOG_FILE
 echo -e "/etc/hosts:\n`cat /etc/hosts`\n" >> $LOG_FILE
 echo_log_file_locations
 disk_configuration
@@ -692,7 +750,9 @@ download_file() {
     PROGRESS=`grep -o -a "..0..%" $3.prg | tail -n1`
     if [ "$PROGRESS%" != "$LAST_PROGRESS%" ]; then
       LAST_PROGRESS=$PROGRESS
-      printf "%s %s [$PROGRESS%]\n" "$string" "$${line:$${#string}}"
+      if [ -n "$${PROGRESS/[ ]*\n/}" ]; then
+        printf "%s %s [$PROGRESS%]\n" "$string" "$${line:$${#string}}"
+      fi
     fi
   done
   rm -rf $3.prg
@@ -702,6 +762,25 @@ download_file() {
 # Check if a command exists
 command_exists() {
   type "$1" &> /dev/null;
+}
+
+# Check if the environment is offline
+is_offline() {
+  ping -c 3 -w 10 www.ibm.com 2> /dev/null
+  if [ $? -ne "0" ]; then
+    echo "true"
+  else
+    echo "false"
+  fi
+}
+
+# Load a docker image
+function load_docker_image {
+  if [[ -n $1 ]] && [[ -n $2 ]]; then
+    echo "[*] Loading docker image $1"
+    download_file $2 $1 $2
+    docker image load -q < $2
+  fi
 }
 EndOfFile
    destination = "./advanced-content-runtime/utilities.sh"
@@ -788,14 +867,14 @@ fi
 
 # Create admin user if it's not there
 if [ `/usr/bin/chef-server-ctl user-list|grep -cE $ADMIN_NAME` -eq 0 ]; then
-    echo "Creating admin user: $ADMIN_NAME"
+    echo "Creating admin user: $ADMIN_NAME"; sleep 5;
     /usr/bin/chef-server-ctl user-create $ADMIN_NAME $ADMIN_NAME $ADMIN_NAME $ADMIN_MAIL "$ADMIN_PASSWORD" -f /etc/opscode/$ADMIN_NAME.pem
 fi
 
 # Create chef organization
 SHORT_ORG_NAME=`echo $ORG_NAME | tr '[:upper:]' '[:lower:]'`
 if [ `/usr/bin/chef-server-ctl org-list|grep -cE $SHORT_ORG_NAME` -eq 0 ]; then
-    echo "Creating organization: $SHORT_ORG_NAME"
+    echo "Creating organization: $SHORT_ORG_NAME"; sleep 5;
     /usr/bin/chef-server-ctl org-create $SHORT_ORG_NAME $ORG_NAME -f /etc/opscode/$SHORT_ORG_NAME.pem --association_user $ADMIN_NAME
 fi
 
@@ -1072,6 +1151,7 @@ set -o nounset
 set -o pipefail
 
 TEMPLATE_TIMESTAMP=""
+. `dirname $0`/utilities.sh
 
 function setup_aws_private() { # This is for PRIVATE network
   # AWS images do not have standard settings for IP and Hostname on the image.
@@ -1215,6 +1295,8 @@ fi
 DOCKER_REGISTRY="orpheus-local-docker.artifactory.swg-devops.com"
 DOCKER_IMAGE_PATH="opencontent"
 
+COOKBOOKS_FILE="/var/IBM-AutomationContentHub.tar"
+
 CHEF_ADMIN="chef-admin"
 CHEF_IPADDR=""
 CHEF_PEM=""
@@ -1260,7 +1342,7 @@ CAM_PUBLIC_KEY_NAME=""
 USER_PUBLIC_KEY=""
 
 help=false
-debug=false
+DEBUG=false
 
 PRIVATE_NETWORK=`head -n1 $parmfile` # pull off the first parameter indicating this is a private network
 
@@ -1309,7 +1391,11 @@ while IFS='' read -r parameter || [[ -n "$parameter" ]]; do
         [[ $parameter =~ ^-re|--prereq_strictness= ]] && { PREREQ_STRICTNESS=`echo $parameter|cut -f2- -d'='`; continue;  };
         [[ $parameter =~ ^-n|--nfs_mount_point= ]] && { NFS_SERVER_IP_ADDR=`echo $parameter|cut -f2- -d'='`; continue;  };
         [[ $parameter =~ ^-tt|--template_timestamp= ]] && { TEMPLATE_TIMESTAMP=`echo $parameter|cut -f2- -d'='`; continue;  };
-        [[ $parameter =~ ^-d|--debug$ ]] && { debug=true;  };
+        [[ $parameter =~ ^-id|--installer_docker= ]] && { INSTALLER_DOCKER=`echo $parameter|cut -f2- -d'='`; continue;  };
+        [[ $parameter =~ ^-ic|--installer_docker_compose= ]] && { INSTALLER_DOCKER_COMPOSE=`echo $parameter|cut -f2- -d'='`; continue;  };
+        [[ $parameter =~ ^-ri|--sw_repo_image= ]] && { SW_REPO_IMAGE=`echo $parameter|cut -f2- -d'='`; continue;  };
+        [[ $parameter =~ ^-pi|--pm_image= ]] && { PM_IMAGE=`echo $parameter|cut -f2- -d'='`; continue;  };
+        [[ $parameter =~ ^-d|--debug$ ]] && { DEBUG=`echo $parameter|cut -f2- -d'='`; continue;  };
         [[ $parameter =~ ^-h|--help$ ]] && { help=true;  };
         #shift
 done < $parmfile
@@ -1320,7 +1406,7 @@ if [ "$help" == true ] ; then
   exit 0
 fi
 
-if [ "$debug" == true ] ; then
+if [ "$DEBUG" == true ] ; then
 	set -x
 	export DEBUG="true"
 fi
@@ -1331,12 +1417,13 @@ begin_message "Requirements Checker"
 # Check and install pre-requisites
 chmod +x $runtimepath/prereq-check-install.sh
 chmod +x $runtimepath/verify-installation.sh
-$runtimepath/prereq-check-install.sh "$PREREQ_STRICTNESS" "$CHEF_VERSION" "$CAM_PUBLIC_KEY" "$CAM_PRIVATE_KEY_ENC" "$DOCKER_EE_REPO"
+$runtimepath/prereq-check-install.sh -m "$PREREQ_STRICTNESS" -c "$CHEF_VERSION" -u "$CAM_PUBLIC_KEY" -r "$CAM_PRIVATE_KEY_ENC" -e "$DOCKER_EE_REPO" -o "$INSTALLER_DOCKER_COMPOSE" -d "$INSTALLER_DOCKER"
 end_message "Successful"
 
 begin_message "Disk"
 FSTAB_FILE="/etc/fstab"
 
+platform=`cat /etc/*release 2>/dev/null| egrep "^ID=" | cut -d '=' -f 2- | tr -d '"'`
 MOUNT_POINT="/opt/ibm/docker/software-repo"
 REPO_DIR=$MOUNT_POINT/var/swRepo/private
 if [[ ! -e $parmdir/mounts_setup.done ]] ; then
@@ -1345,7 +1432,7 @@ if [[ ! -e $parmdir/mounts_setup.done ]] ; then
       # Allocate the software repo disk
       allocate_software_disk
       ;;
-    "*")
+    *)
       if [[ $platform == *"ubuntu"* ]]; then
         sudo apt-get -y install nfs-common # set the common mount point
       fi
@@ -1354,7 +1441,7 @@ if [[ ! -e $parmdir/mounts_setup.done ]] ; then
       fi
       echo  "$NFS_SERVER_IP_ADDR /nfsmnt nfs4 rsize=1048576,hard,timeo=600,retrans=2,ro 0 0"  | sudo tee -a $FSTAB_FILE
       # run the mount command here, to allow for the docker container to access
-      sudo mkdir /nfsmnt
+      sudo mkdir -p /nfsmnt
       sudo mount /nfsmnt
       # Sym-link the software repo
       [[ ! -e $MOUNT_POINT/var/ ]] &&  sudo mkdir -p $MOUNT_POINT/var/
@@ -1368,19 +1455,16 @@ end_message "Successful"
 #Install docker engine
 begin_message Docker
 if [[ ! `sudo ls /etc/docker/daemon.json 2>/dev/null` ]]; then
-        sudo groupadd docker || echo ""
-        sudo usermod -aG docker $USER # even though we have added the user to the group, it will not take effect on this pid/process
-        # Check to see if the docker service is running
-        [[ `which systemctl` ]] && { sudo systemctl stop docker || true ; } || { sudo service docker stop || true ; }
-        docker_disk
-        [[ `which systemctl` ]] && sudo systemctl start docker || sudo service docker start
+  sudo groupadd docker || echo ""
+  sudo usermod -aG docker $USER # even though we have added the user to the group, it will not take effect on this pid/process
+  # Check to see if the docker service is running
+  [[ `which systemctl` ]] && { sudo systemctl stop docker || true ; } || { sudo service docker stop || true ; }
+  docker_disk
+  [[ `which systemctl` ]] && sudo systemctl start docker || sudo service docker start
 fi
 end_message "Successful"
 
 begin_message Environment
-OFFLINE="false"
-# Check for internet collection
-[[ `ping -c 3 -w 10 www.ibm.com | egrep "0 received,"` ]] && OFFLINE="true" || OFFLINE="false"
 
 # The main difference between aws and other is the network and getting some information
 # This line will determine if the machine is in AWS, if so, it must curl the IPAddress. Otherwise the code will sed its way thru the ip addr return removing all local, and private IPs to find the public IP
@@ -1412,8 +1496,6 @@ if [ $DOCKER_REGISTRY = "hub.docker.com" ] ; then # if the registry is docker
 else
 	DOCKER_REGISTRY_PATH="$otherhub"
 fi
-
-platform=`cat /etc/*release 2>/dev/null| egrep "^ID=" | cut -d '=' -f 2- | tr -d '"'`
 end_message "Successful"
 
 begin_message Chef
@@ -1522,9 +1604,11 @@ sed -i.bak "s|\$CHEF_ADMIN|$CHEF_ADMIN|; \
     $runtimepath/docker-compose.yml
 
 # Update the pattern manager to load the software repo
-sed "s|\$CAMHUB_ACCESS_TOKEN|$CAMHUB_ACCESS_TOKEN|; \
-     s|\$CAMHUB_HOST|$CAMHUB_HOST|; \
-     s|\$CAMHUB_ORG|$CAMHUB_ORG|" $runtimepath/load.tmpl > $runtimepath/load.json
+if [[ ! -z $CAMHUB_ACCESS_TOKEN ]] ; then
+    sed "s|\$CAMHUB_ACCESS_TOKEN|$CAMHUB_ACCESS_TOKEN|; \
+         s|\$CAMHUB_HOST|$CAMHUB_HOST|; \
+         s|\$CAMHUB_ORG|$CAMHUB_ORG|" $runtimepath/load.tmpl > $runtimepath/load.json
+fi
 
 end_message "Successful"
 
@@ -1539,10 +1623,22 @@ fi
 # The sudo su $USER is to become the user which includes the inclusion in the docker group
 sudo su $USER -c "$docker_compose_CMD -f $runtimepath/docker-compose.yml down" # shut down incase were are re-enterant
 
-# Check if images exist locally, if not, download them
-if [[ $OFFLINE == *"true"* ]] && [[ "$(sudo docker images -q $DOCKER_REGISTRY_PATH/camc-pattern-manager:$PATTERN_MGR_VERSION 2> /dev/null)" == "" ]] && [[ "$(sudo docker images -q $DOCKER_REGISTRY_PATH/camc-sw-repo:$SOFTWARE_REPO_VERSION 2> /dev/null)" == "" ]]; then
+# Check if images exist locally or can be loaded, if not, download them
+if [[ -n $PM_IMAGE ]]; then
+  # Preload docker images
+  echo "[*] Pattern Manager image provided"
+  load_docker_image $PM_IMAGE pattern-manager
+fi
+
+if [[ -n $SW_REPO_IMAGE ]]; then
+  echo "[*] Software Repository image provided"
+  load_docker_image $SW_REPO_IMAGE sw-repository
+fi
+
+if [[ "$(sudo docker images -q $DOCKER_REGISTRY_PATH/camc-pattern-manager 2> /dev/null)" != "" ]] && [[ "$(sudo docker images -q $DOCKER_REGISTRY_PATH/camc-sw-repo 2> /dev/null)" != "" ]]; then
   echo "[*] Docker images found"
 else
+  echo "[*] Downloading Docker images"
   sudo su $USER -c "$docker_compose_CMD -f $runtimepath/docker-compose.yml pull > /dev/null"
 fi
 sudo su $USER -c "$docker_compose_CMD -f $runtimepath/docker-compose.yml up -d"
@@ -1551,18 +1647,28 @@ end_message "Successful"
 begin_message "Cookbooks"
 # chef-user who is not defined at the OS level needs write access to the pattern folder.
 sudo chmod o+rw /var/log/ibm/docker/pattern-manager/
-if [[ $CONFIGURATION = "single-node" ]] ; then
-	# For sure on the single-node, we want to wait for the docker chef to start, then restart the pattern-manager
-	# for the other configruations, the restart is handled in the templated, waiting for the pem file to be written
-	pemfile="/opt/ibm/docker/chef-server/etc/opscode/$CHEF_ADMIN.pem"
-	count=0
-	sleep 20 # The chef server needs a little time before servicing requests
-	# Call to the pattern manager for the initialization of the cookbooks
-	echo "Update the cookbooks on chef server"
-	echo curl --write-out %{http_code} --output /dev/null --request POST -k -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization:Bearer $PATTERN_MGR_ACCESS_TOKEN" https://localhost:5443/v1/upload/chef/git_hub --data @$runtimepath/load.json
-	response=`curl --write-out %{http_code} --output /dev/null --request POST -k -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization:Bearer $PATTERN_MGR_ACCESS_TOKEN" https://localhost:5443/v1/upload/chef/git_hub --data @$runtimepath/load.json`
-	echo "Return from the curl command : $response"
-	curl -k -H "Authorization:Bearer $PATTERN_MGR_ACCESS_TOKEN" -X GET https://localhost:5443/v1/info/chef
+if [[ -e $COOKBOOKS_FILE ]]; then
+  echo "[*] Copying cookbooks to Pattern Manager"
+  COOKBOOKS_TAR=$(basename $COOKBOOKS_FILE)
+  docker exec camc-pattern-manager mkdir /var/cookbooks
+  docker cp $COOKBOOKS_FILE camc-pattern-manager:/var/cookbooks/
+  docker exec camc-pattern-manager tar -xvf /var/cookbooks/$COOKBOOKS_TAR -C /var/cookbooks > /dev/null
+  echo "[*] Loading cookbooks"
+  curl --request POST -k -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization:Bearer $PATTERN_MGR_ACCESS_TOKEN" https://localhost:5443/v1/upload/chef -d '{"cookbooks":"True","roles":"True","source_repos":"file:///var/cookbooks/", "repos":"cookbook_*"}'
+else
+  if [[ $CONFIGURATION = "single-node" ]] ; then
+  	# For sure on the single-node, we want to wait for the docker chef to start, then restart the pattern-manager
+  	# for the other configruations, the restart is handled in the templated, waiting for the pem file to be written
+  	pemfile="/opt/ibm/docker/chef-server/etc/opscode/$CHEF_ADMIN.pem"
+  	count=0
+  	sleep 20 # The chef server needs a little time before servicing requests
+  	# Call to the pattern manager for the initialization of the cookbooks
+  	echo "Update the cookbooks on chef server"
+  	echo curl --write-out %{http_code} --output /dev/null --request POST -k -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization:Bearer $PATTERN_MGR_ACCESS_TOKEN" https://localhost:5443/v1/upload/chef/git_hub --data @$runtimepath/load.json
+  	response=`curl --write-out %{http_code} --output /dev/null --request POST -k -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization:Bearer $PATTERN_MGR_ACCESS_TOKEN" https://localhost:5443/v1/upload/chef/git_hub --data @$runtimepath/load.json`
+  	echo "Return from the curl command : $response"
+  	curl -k -H "Authorization:Bearer $PATTERN_MGR_ACCESS_TOKEN" -X GET https://localhost:5443/v1/info/chef
+  fi
 fi
 end_message "Successful"
 
@@ -1573,6 +1679,9 @@ end_message "Successful"
 begin_message "Verify Installation"
 $runtimepath/verify-installation.sh
 end_message "Successful"
+
+#clean up
+[[ ! "$DEBUG" = "true" ]] && { sed -i -e '/^--docker_registry_token=/d' -e '/^--software_repo_pass=/d' -e '/^--im_repo_pass=/d' -e '/^--ibm_pm_private_ssh_key=/d' -e '/^--ibm_contenthub_git_access_token=/d'  $parmfile ; }
 EndOfFile
     destination = "./advanced-content-runtime/launch-docker-compose.sh"
   }
@@ -1581,7 +1690,7 @@ EndOfFile
     inline = [
         "chmod 775 ./advanced-content-runtime/launch-docker-compose.sh",
         "chmod 775 ./advanced-content-runtime/image-upgrade.sh",
-        "bash -c \"./advanced-content-runtime/launch-docker-compose.sh ${var.network_visibility} --docker_registry_token='${var.docker_registry_token}'  --nfs_mount_point='${var.nfs_mount}' --software_repo_user='${var.ibm_sw_repo_user}' --software_repo_pass='${var.ibm_sw_repo_password}' --im_repo_user='${var.ibm_im_repo_user_hidden}' --im_repo_pass='${var.ibm_im_repo_password_hidden}'  --chef_host=chef-server --software_repo=software-repo --pattern_mgr=pattern --ibm_contenthub_git_access_token='${var.ibm_contenthub_git_access_token}' --ibm_contenthub_git_host='${var.ibm_contenthub_git_host}' --ibm_contenthub_git_organization='${var.ibm_contenthub_git_organization}' --ibm_openhub_git_organization='${var.ibm_openhub_git_organization}' --chef_org='${var.chef_org}' --chef_admin='${var.chef_admin}' --docker_registry='${var.docker_registry}' --chef_version=${var.chef_version} --ibm_pm_access_token='${var.ibm_pm_access_token}' --ibm_pm_admin_token='${var.ibm_pm_admin_token}' --camc-sw-repo_version='${var.docker_registry_camc_sw_repo_version}' --docker_ee_repo='${var.docker_ee_repo}' --camc-pattern-manager_version='${var.docker_registry_camc_pattern_manager_version}' --docker_configuration=single-node --ibm_pm_public_ssh_key_name='${var.ibm_pm_public_ssh_key_name}' --ibm_pm_private_ssh_key='${var.ibm_pm_private_ssh_key}' --ibm_pm_public_ssh_key='${var.ibm_pm_public_ssh_key}' --user_public_ssh_key='${var.user_public_ssh_key}' --prereq_strictness='${var.prereq_strictness}' --ip_address='${var.ipv4_address}' --template_timestamp='${var.template_timestamp_hidden}'\""
+        "bash -c \"./advanced-content-runtime/launch-docker-compose.sh ${var.network_visibility} --docker_registry_token='${var.docker_registry_token}' --nfs_mount_point='${var.nfs_mount}' --software_repo_user='${var.ibm_sw_repo_user}' --software_repo_pass='${var.ibm_sw_repo_password}' --im_repo_user='${var.ibm_im_repo_user_hidden}' --im_repo_pass='${var.ibm_im_repo_password_hidden}'  --chef_host=chef-server --software_repo=software-repo --pattern_mgr=pattern --ibm_contenthub_git_access_token='${var.ibm_contenthub_git_access_token}' --ibm_contenthub_git_host='${var.ibm_contenthub_git_host}' --ibm_contenthub_git_organization='${var.ibm_contenthub_git_organization}' --ibm_openhub_git_organization='${var.ibm_openhub_git_organization}' --chef_org='${var.chef_org}' --chef_admin='${var.chef_admin}' --docker_registry='${var.docker_registry}' --chef_version=${var.chef_version} --ibm_pm_access_token='${var.ibm_pm_access_token}' --ibm_pm_admin_token='${var.ibm_pm_admin_token}' --camc-sw-repo_version='${var.docker_registry_camc_sw_repo_version}' --docker_ee_repo='${var.docker_ee_repo}' --camc-pattern-manager_version='${var.docker_registry_camc_pattern_manager_version}' --docker_configuration=single-node --ibm_pm_public_ssh_key_name='${var.ibm_pm_public_ssh_key_name}' --ibm_pm_private_ssh_key='${var.ibm_pm_private_ssh_key}' --ibm_pm_public_ssh_key='${var.ibm_pm_public_ssh_key}' --user_public_ssh_key='${var.user_public_ssh_key}' --prereq_strictness='${var.prereq_strictness}' --ip_address='${var.ipv4_address}' --template_timestamp='${var.template_timestamp_hidden}' --installer_docker='${var.installer_docker}' --installer_docker_compose='${var.installer_docker_compose}' --sw_repo_image='${var.sw_repo_image}' --pm_image='${var.pm_image}' --template_debug='${var.template_debug}'\""
       ]
    }
 } # End of Resource
@@ -1600,7 +1709,7 @@ EndOfFile
   output "ibm_im_repo_password" {
   value = "${var.ibm_sw_repo_password}" }
   output "template_timestamp" {
-  value = "2017-10-16 18:59:39" }
+  value = "2017-11-30 14:42:02" }
 ### End Other output variables
 
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
@@ -1621,17 +1730,22 @@ output "chef_org" { value = "${var.chef_org}"}
 output "chef_admin" { value = "${var.chef_admin}"}
 output "ibm_pm_access_token" { value = "${var.ibm_pm_access_token}"}
 output "ibm_pm_admin_token" { value = "${var.ibm_pm_admin_token}"}
-output "network_visibility" { value = "${var.network_visibility}"}
 output "ibm_pm_public_ssh_key_name" { value = "${var.ibm_pm_public_ssh_key_name}"}
 output "ibm_pm_private_ssh_key" { value = "${var.ibm_pm_private_ssh_key}"}
 output "ibm_pm_public_ssh_key" { value = "${var.ibm_pm_public_ssh_key}"}
 output "user_public_ssh_key" { value = "${var.user_public_ssh_key}"}
 output "docker_ee_repo" { value = "${var.docker_ee_repo}"}
 output "template_timestamp_hidden" { value = "${var.template_timestamp_hidden}"}
+output "template_debug" { value = "${var.template_debug}"}
 output "nfs_mount" { value = "${var.nfs_mount}"}
 output "ipv4_address" { value = "${var.ipv4_address}"}
 output "vm_image_ssh_user" { value = "${var.vm_image_ssh_user}"}
 output "vm_image_ssh_password" { value = "${var.vm_image_ssh_password}"}
 output "vm_image_ssh_private_key" { value = "${var.vm_image_ssh_private_key}"}
+output "network_visibility" { value = "${var.network_visibility}"}
 output "prereq_strictness" { value = "${var.prereq_strictness}"}
+output "installer_docker" { value = "${var.installer_docker}"}
+output "installer_docker_compose" { value = "${var.installer_docker_compose}"}
+output "sw_repo_image" { value = "${var.sw_repo_image}"}
+output "pm_image" { value = "${var.pm_image}"}
 ### End Output

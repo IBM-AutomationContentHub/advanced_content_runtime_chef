@@ -3,8 +3,6 @@
 # @ Copyright IBM Corporation 2016, 2017 All Rights Reserved
 # US Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule Contract with IBM Corp.
 
-### Input Section
-
  variable "runtime_hostname" { type = "string" }
  variable "docker_registry_token" { type = "string" }
  variable "docker_registry" { type = "string" }
@@ -30,25 +28,22 @@
  variable "docker_ee_repo" { type = "string" }
  variable "template_timestamp_hidden" { type = "string" }
  variable "template_debug" { type = "string" }
- variable "vsphere_datacenter" { type = "string" }
- variable "vsphere_cluster" { type = "string" }
- variable "vsphere_folder" { type = "string" }
- variable "vsphere_datastore" { type = "string" }
  variable "runtime_domain" { type = "string" }
+ variable "cam_public_key" { type = "string" }
+ variable "ipv4_address" { type = "string" }
+ variable "portable_private_ip" { type = "string" }
+ variable "portable_private_ip_netmask" { type = "string" }
+ variable "portable_private_ip_gateway" { type = "string" }
+ variable "ibmcloud_os_image" { type = "string" }
+ variable "nfs_mount" { type = "string" }
+ variable "bluemix_softlayer_datacenter" { type = "string" }
+ variable "private_subnet" { type = "string" }
+ variable "private_vlan_name" { type = "string" }
+ variable "dedicated_acct_host_only" { type = "string" }
+ variable "hourly_billing" { type = "string" }
+ variable "network_speed" { type = "string" }
  variable "cores" { type = "string" }
  variable "memory" { type = "string" }
- variable "nfs_mount" { type = "string" }
- variable "vsphere_dns" { type = "list" }
- variable "disk1_template" { type = "string" }
- variable "disk2_name" { type = "string" }
- variable "disk2_size" { type = "string" }
- variable "network_label" { type = "string" }
- variable "ipv4_address" { type = "string" }
- variable "ipv4_gateway" { type = "string" }
- variable "ipv4_prefix_length" { type = "string" }
- variable "vmware_image_ssh_user" { type = "string" }
- variable "vmware_image_ssh_password" { type = "string" }
- variable "vmware_image_ssh_private_key" { type = "string" }
  variable "network_visibility" { type = "string" }
  variable "prereq_strictness" { type = "string" }
  variable "installer_docker" { type = "string" }
@@ -56,56 +51,102 @@
  variable "sw_repo_image" { type = "string" }
  variable "pm_image" { type = "string" }
 
-### End Input Section
-
-provider "vsphere" {
-  version = "~> 0.4"
-  allow_unverified_ssl = true
+provider "tls" {
+  version = "~> 1.0"
 }
 
-resource "vsphere_virtual_machine" "singlenode" {
-  name = "${var.runtime_hostname}"
-  vcpu = "${var.cores}"
-  memory = "${var.memory}"
+resource "tls_private_key" "ssh" {
+  algorithm = "RSA"
+}
+
+provider "ibm" {
+  version = "~> 0.5"
+
+}
+
+resource "ibm_compute_ssh_key" "internal_public_key" {
+  label = "${var.runtime_hostname}_${var.cam_public_key}"
+  public_key = "${tls_private_key.ssh.public_key_openssh}"
+}
+
+# Retrieve private VLAN ID
+data "ibm_network_vlan" "private" {
+  count = "${length(var.private_vlan_name) > 0 ? 1 : 0 }"
+  name = "${var.private_vlan_name}"
+}
+
+resource "ibm_compute_vm_instance" "single-node" {
+  hostname = "${var.runtime_hostname}"
+  os_reference_code = "${var.ibmcloud_os_image}"
   domain = "${var.runtime_domain}"
-  datacenter = "${var.vsphere_datacenter}"
-  dns_servers = "${var.vsphere_dns}"
-  cluster = "${var.vsphere_cluster}"
-  folder = "${var.vsphere_folder}"
-
-
-  network_interface {
-    label = "${var.network_label}"
-    ipv4_address = "${var.ipv4_address}"
-    ipv4_gateway = "${var.ipv4_gateway}"
-    ipv4_prefix_length = "${var.ipv4_prefix_length}"
-  }
-
-  disk {
-    # template or vmdk
-    template = "${var.disk1_template}"
-    datastore="${var.vsphere_datastore}"
-    # size = "${var.disk1_size}"
-    # name = "${var.disk1_name}"
-  }
-
-  disk {
-    size = "${var.disk2_size}"
-    name = "${var.disk2_name}"
-    datastore="${var.vsphere_datastore}"
-  }
-
+  datacenter = "${var.bluemix_softlayer_datacenter}"
+  network_speed = "${var.network_speed}"
+  hourly_billing = "${var.hourly_billing}"
+  private_network_only = "${var.network_visibility == "public" ? "false" : "true"}"
+  private_subnet = "${var.private_subnet}"
+  private_vlan_id = "${coalesce(join("", data.ibm_network_vlan.private.*.id), -1)}"
+  cores = "${var.cores}"
+  memory = "${var.memory}"
+  disks = [25,100]
+  dedicated_acct_host_only = "${var.dedicated_acct_host_only}"
+  local_disk = false
+  # Add in the generated public key to authorized hosts file
+  ssh_key_ids = ["${ibm_compute_ssh_key.internal_public_key.id}"]
   # Set the ssh connection using the private generted ssh key
   connection {
     type = "ssh"
-    user = "${var.vmware_image_ssh_user}"
-    password = "${var.vmware_image_ssh_password}"
-    private_key = "${ length(var.vmware_image_ssh_private_key) > 0 ? base64decode(var.vmware_image_ssh_private_key) : var.vmware_image_ssh_private_key}"
+    user = "root"
+    private_key = "${tls_private_key.ssh.private_key_pem}"
   }
 
+  # Installation script for Portable IP address
+  provisioner "file" {
+    content = <<EndOfFile
+#!/bin/bash
+#
+# Copyright : IBM Corporation 2016, 2017
+#
+##########################################
+set -o errexit
+set -o nounset
+set -o pipefail
+
+PORTABLE_PRIVATE_IP=$1
+PORTABLE_PRIVATE_IP_NETMASK=$2
+PORTABLE_PRIVATE_IP_GW=$3
+
+echo "[*] Adding portable IP address"
+if uname -a | grep -io "Ubuntu"; then
+    cat << EOT >> /etc/network/interfaces
+auto eth0:1
+iface eth0:1 inet static
+    address $PORTABLE_PRIVATE_IP
+    netmask $PORTABLE_PRIVATE_IP_NETMASK
+EOT
+    ifup eth0:1
+    ping -c 5 $PORTABLE_PRIVATE_IP_GW
+elif uname -a | grep -io 'el7'; then
+    cat << EOT >> /etc/sysconfig/network-scripts/ifcfg-eth0:1
+DEVICE=eth0:1
+BOOTPROTO=static
+ONBOOT=yes
+IPADDR=$PORTABLE_PRIVATE_IP
+NETMASK=$PORTABLE_PRIVATE_IP_NETMASK
+EOT
+    ifup eth0:1
+else
+    echo "[ERROR] The provided OS is not supported"
+fi
+echo "[SUCCESS] The provided portable IP address has been assigned successfully"
+EndOfFile
+  destination = "/tmp/configure-portable-private-ip.sh"
+  }
+
+  # Execute the portable IP script remotely and create a directory to contain the advanced Content Runtime files
   provisioner "remote-exec" {
     inline = [
-        "mkdir -p ./advanced-content-runtime"
+      "chmod +x /tmp/configure-portable-private-ip.sh; bash /tmp/configure-portable-private-ip.sh \"${var.portable_private_ip}\" \"${var.portable_private_ip_netmask}\" \"${var.portable_private_ip_gateway}\"",
+      "mkdir -p ./advanced-content-runtime"
       ]
    }
 
@@ -1741,25 +1782,29 @@ EndOfFile
         "bash -c \"./advanced-content-runtime/launch-docker-compose.sh ${var.network_visibility} --docker_registry_token='${var.docker_registry_token}' --nfs_mount_point='${var.nfs_mount}' --software_repo_user='${var.ibm_sw_repo_user}' --software_repo_pass='${var.ibm_sw_repo_password}' --im_repo_user='${var.ibm_im_repo_user_hidden}' --im_repo_pass='${var.ibm_im_repo_password_hidden}'  --chef_host=chef-server --software_repo=software-repo --pattern_mgr=pattern --ibm_contenthub_git_access_token='${var.ibm_contenthub_git_access_token}' --ibm_contenthub_git_host='${var.ibm_contenthub_git_host}' --ibm_contenthub_git_organization='${var.ibm_contenthub_git_organization}' --ibm_openhub_git_organization='${var.ibm_openhub_git_organization}' --chef_org='${var.chef_org}' --chef_admin='${var.chef_admin}' --docker_registry='${var.docker_registry}' --chef_version=${var.chef_version} --ibm_pm_access_token='${var.ibm_pm_access_token}' --ibm_pm_admin_token='${var.ibm_pm_admin_token}' --camc-sw-repo_version='${var.docker_registry_camc_sw_repo_version}' --docker_ee_repo='${var.docker_ee_repo}' --camc-pattern-manager_version='${var.docker_registry_camc_pattern_manager_version}' --docker_configuration=single-node --ibm_pm_public_ssh_key_name='${var.ibm_pm_public_ssh_key_name}' --ibm_pm_private_ssh_key='${var.ibm_pm_private_ssh_key}' --ibm_pm_public_ssh_key='${var.ibm_pm_public_ssh_key}' --user_public_ssh_key='${var.user_public_ssh_key}' --prereq_strictness='${var.prereq_strictness}' --ip_address='${var.ipv4_address}' --template_timestamp='${var.template_timestamp_hidden}' --installer_docker='${var.installer_docker}' --installer_docker_compose='${var.installer_docker_compose}' --sw_repo_image='${var.sw_repo_image}' --pm_image='${var.pm_image}' --template_debug='${var.template_debug}'\""
       ]
    }
-}
+} # End of ibm_cloud resources
 
-### VMware output variables
+### IBM output variables
+  output "private_key" {
+  value = "${tls_private_key.ssh.private_key_pem}" }
+  output "public_key" {
+  value = "${tls_private_key.ssh.public_key_pem}" }
   output "ip_address" {
-  value = "${var.ipv4_address}" }
+  value = "${var.network_visibility == "public" ? "${ibm_compute_vm_instance.single-node.ipv4_address}" : "${ibm_compute_vm_instance.single-node.ipv4_address_private}"}" }
   output "ibm_sw_repo" {
-  value = "https://${var.ipv4_address}:9999" }
+  value = "https://${var.network_visibility == "public" ? "${ibm_compute_vm_instance.single-node.ipv4_address}" : "${ibm_compute_vm_instance.single-node.ipv4_address_private}"}:9999" }
   output "ibm_im_repo" {
-  value = "https://${var.ipv4_address}:9999/IMRepo" }
+  value = "https://${var.network_visibility == "public" ? "${ibm_compute_vm_instance.single-node.ipv4_address}" : "${ibm_compute_vm_instance.single-node.ipv4_address_private}"}:9999/IMRepo" }
   output "ibm_pm_service" {
-  value = "https://${var.ipv4_address}:5443" }
+  value = "https://${var.network_visibility == "public" ? "${ibm_compute_vm_instance.single-node.ipv4_address}" : "${ibm_compute_vm_instance.single-node.ipv4_address_private}"}:5443" }
   output "ibm_im_repo_user" {
   value = "${var.ibm_sw_repo_user}" }
   output "ibm_im_repo_password" {
   value = "${var.ibm_sw_repo_password}" }
   output "template_timestamp" {
-  value = "2017-11-30 14:41:57" }
-### End VMware output variables
+  value = "2017-11-30 14:41:52" }
 
+### End IBM output variables
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
 output "docker_registry_token" { value = "${var.docker_registry_token}"}
 output "docker_registry" { value = "${var.docker_registry}"}
@@ -1785,25 +1830,22 @@ output "user_public_ssh_key" { value = "${var.user_public_ssh_key}"}
 output "docker_ee_repo" { value = "${var.docker_ee_repo}"}
 output "template_timestamp_hidden" { value = "${var.template_timestamp_hidden}"}
 output "template_debug" { value = "${var.template_debug}"}
-output "vsphere_datacenter" { value = "${var.vsphere_datacenter}"}
-output "vsphere_cluster" { value = "${var.vsphere_cluster}"}
-output "vsphere_folder" { value = "${var.vsphere_folder}"}
-output "vsphere_datastore" { value = "${var.vsphere_datastore}"}
 output "runtime_domain" { value = "${var.runtime_domain}"}
+output "cam_public_key" { value = "${var.cam_public_key}"}
+output "ipv4_address" { value = "${var.ipv4_address}"}
+output "portable_private_ip" { value = "${var.portable_private_ip}"}
+output "portable_private_ip_netmask" { value = "${var.portable_private_ip_netmask}"}
+output "portable_private_ip_gateway" { value = "${var.portable_private_ip_gateway}"}
+output "ibmcloud_os_image" { value = "${var.ibmcloud_os_image}"}
+output "nfs_mount" { value = "${var.nfs_mount}"}
+output "bluemix_softlayer_datacenter" { value = "${var.bluemix_softlayer_datacenter}"}
+output "private_subnet" { value = "${var.private_subnet}"}
+output "private_vlan_name" { value = "${var.private_vlan_name}"}
+output "dedicated_acct_host_only" { value = "${var.dedicated_acct_host_only}"}
+output "hourly_billing" { value = "${var.hourly_billing}"}
+output "network_speed" { value = "${var.network_speed}"}
 output "cores" { value = "${var.cores}"}
 output "memory" { value = "${var.memory}"}
-output "nfs_mount" { value = "${var.nfs_mount}"}
-output "vsphere_dns" { value = "${var.vsphere_dns}"}
-output "disk1_template" { value = "${var.disk1_template}"}
-output "disk2_name" { value = "${var.disk2_name}"}
-output "disk2_size" { value = "${var.disk2_size}"}
-output "network_label" { value = "${var.network_label}"}
-output "ipv4_address" { value = "${var.ipv4_address}"}
-output "ipv4_gateway" { value = "${var.ipv4_gateway}"}
-output "ipv4_prefix_length" { value = "${var.ipv4_prefix_length}"}
-output "vmware_image_ssh_user" { value = "${var.vmware_image_ssh_user}"}
-output "vmware_image_ssh_password" { value = "${var.vmware_image_ssh_password}"}
-output "vmware_image_ssh_private_key" { value = "${var.vmware_image_ssh_private_key}"}
 output "network_visibility" { value = "${var.network_visibility}"}
 output "prereq_strictness" { value = "${var.prereq_strictness}"}
 output "installer_docker" { value = "${var.installer_docker}"}

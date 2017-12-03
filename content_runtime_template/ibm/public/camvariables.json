@@ -333,7 +333,7 @@
   "name": "template_timestamp_hidden",
   "type": "string",
   "description": "Internal automatically updated variable containing the Content Runtime template timestamp",
-  "default": "2017-11-30 14:42:02",
+  "default": "2017-11-30 14:41:52",
   "hidden": true,
   "label": "Template Timestamp",
   "group_name": "additional_settings",
@@ -355,152 +355,391 @@
   "required": true,
   "immutable": true
 },
-{
-  "name": "nfs_mount",
-  "type": "string",
-  "description": "NFS Mount, internal setting use to indicate that there is no additional disk.",
-  "default": "local",
-  "hidden": true,
-  "label": "NFS Mount",
-  "group_name": "cloud_provider",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": true
-},
-{
-  "name": "ipv4_address",
-  "type": "string",
-  "description": "Static IPv4 to assign to this network interface. This must be a static IP, and it is the IP address of the machine as known to the network.",
-  "hidden": false,
-  "label": "Static IPv4 address",
-  "group_name": "cloud_provider",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": false
-},
-{
-  "name": "vm_image_ssh_user",
-  "type": "string",
-  "description": "The user name which can be used to sign on to the system to configure the machine as a Content Runtime.",
-  "hidden": false,
-  "label": "OS Username",
-  "group_name": "cloud_provider",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": false
-},
-{
-  "name": "vm_image_ssh_password",
-  "type": "string",
-  "description": "Password for signing onto the system to configure the machine as a Content Runtime. If an SSH key is provided this parameter is not needed.",
-  "hidden": false,
-  "label": "OS Username password",
-  "group_name": "cloud_provider",
-  "secured": true,
-  "system": false,
-  "required": false,
-  "immutable": false
-},
-{
-  "name": "vm_image_ssh_private_key",
-  "type": "string",
-  "description": "The SSH key to connect to the VM to allow for configuration of the Content Runtime. The key is optional if the password is provided for the OS Username. The key is base64 encoded.",
-  "hidden": false,
-  "label": "OS SSH Private Key - Base64 encoded",
-  "group_name": "cloud_provider",
-  "secured": true,
-  "system": false,
-  "required": false,
-  "immutable": false
-},
-{
-  "name": "network_visibility",
-  "type": "string",
-  "description": "The network connection associated with the Content Runtime VM instance. If network visibility is private, connection must exist from the IBM Cloud Private to the network connection associated with the Content Runtime VM being created.",
-  "default": "public",
-  "hidden": false,
-  "label": "Network Visibility",
-  "group_name": "additional_settings",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": true
-},
-{
-  "name": "prereq_strictness",
-  "type": "string",
-  "description": "If set to strict, the prerequisite checker stops execution if one or more requirements is not installed. If set to lenient,  the prerequisite checker proceeds to install any missing requirement.",
-  "hidden": false,
-  "label": "Prerequisite checker strictness",
-  "group_name": "additional_settings",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": false,
-  "options": [{
+ {
+    "name": "runtime_domain",
+    "type": "string",
+    "description": "VM's domain name for the Content Runtime VM.",
+    "hidden": false,
+    "label": "VM's domain name",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "cam_public_key",
+    "type": "string",
+    "description": "Provide a public key for accessing the virtual machine. The key will be created.",
+    "default": "cam_public_key",
+    "hidden": false,
+    "label": "Public Key",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "ipv4_address",
+    "type": "string",
+    "description": "Static IPv4 address to be assigned to this network interface for the Content Runtime VM.",
+    "default": "dynamic",
+    "hidden": true,
+    "label": "Static IPv4",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": true,
+    "immutable": false
+  },
+  {
+    "name": "portable_private_ip",
+    "type": "string",
+    "description": "Portable private IPv4 address to be assigned to this network interface for the Content Runtime VM. If provided, the address needs to be static.",
+    "hidden": false,
+    "label": "Portable private IP address",
+    "group_name": "cloud_provider_optional",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "portable_private_ip_netmask",
+    "type": "string",
+    "description": "Portable private netmask for the private IP added to the new Content Runtime VM. Required when assigning a portable IP address.",
+    "hidden": false,
+    "label": "Portable private netmask",
+    "group_name": "cloud_provider_optional",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "portable_private_ip_gateway",
+    "type": "string",
+    "description": "Portable private gateway address to be assigned to the new Content Runtime VM. Required when assigning a portable IP address.",
+    "hidden": false,
+    "label": "Portable private gateway",
+    "group_name": "cloud_provider_optional",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "ibmcloud_os_image",
+    "type": "string",
+    "description": "An operating system reference code that is used to provision the computing instance.",
+    "default": "UBUNTU_14_64",
+    "hidden": false,
+    "label": "OS Image Name",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": true
+  },
+  {
+    "name": "nfs_mount",
+    "type": "string",
+    "description": "Internal value",
+    "default": "format",
+    "hidden": true,
+    "label": "Internal value",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": true
+  },
+  {
+    "name": "bluemix_softlayer_datacenter",
+    "type": "string",
+    "description": "Specify the data center to create the Content Runtime VM.",
+    "hidden": false,
+    "label": "Data Center",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "private_subnet",
+    "type": "string",
+    "description": "Private subnet for the private network interface of the instance. Accepted values are primary private networks and can be found in the subnets doc.",
+    "default": "",
+    "hidden": false,
+    "label": "Private subnet",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "private_vlan_name",
+    "type": "string",
+    "description": "Private VLAN name for the network interface of the instance.",
+    "hidden": false,
+    "label": "Private VLAN name",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": true,
+    "immutable": false
+  },
+  {
+    "name": "dedicated_acct_host_only",
+    "type": "string",
+    "description": "Specify whether or not the instance must only run on hosts with instances from the same account",
+    "hidden": false,
+    "label": "Dedicated Account Host",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false,
+    "options": [{
       "default": true,
-      "value": "lenient",
-      "label": "Lenient"
-    }, {
-      "value": "strict",
-      "label": "Strict"
+      "value": "true",
+      "label": "True"
+      }, {
+      "value": "false",
+      "label": "False"
     }]
-},
-{
-  "name": "installer_docker",
-  "type": "string",
-  "description": "Optional file location of a docker .deb/.rpm file to be installed on the system",
-  "default": "",
-  "hidden": false,
-  "label": "Docker installation file",
-  "group_name": "optional_offline",
-  "secured": false,
-  "system": false,
-  "required": false,
-  "immutable": false
-},
-{
-  "name": "installer_docker_compose",
-  "type": "string",
-  "description": "Optional file location of a Docker Compose executable file to be installed on the system",
-  "default": "",
-  "hidden": false,
-  "label": "Docker Compose installation file",
-  "group_name": "optional_offline",
-  "secured": false,
-  "system": false,
-  "required": false,
-  "immutable": false
-},
-{
-  "name": "sw_repo_image",
-  "type": "string",
-  "description": "Optional file location of the Software Repository Docker image to be loaded to the system",
-  "default": "",
-  "hidden": false,
-  "label": "Software Repository Docker image location",
-  "group_name": "optional_offline",
-  "secured": false,
-  "system": false,
-  "required": false,
-  "immutable": false
-},
-{
-  "name": "pm_image",
-  "type": "string",
-  "description": "Optional file location of the Pattern Manager Docker image to be loaded to the system",
-  "default": "",
-  "hidden": false,
-  "label": "Pattern Manager Docker image location",
-  "group_name": "optional_offline",
-  "secured": false,
-  "system": false,
-  "required": false,
-  "immutable": false
-}
+  },
+  {
+    "name": "hourly_billing",
+    "type": "string",
+    "description": "Specify the billing type for the instance. The computing instance can be billed based on an hourly or monthly usage basis.",
+    "hidden": false,
+    "label": "Billing Type",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false,
+    "options": [{
+      "default": true,
+      "value": "true",
+      "label": "Hourly"
+    }, {
+      "value": "false",
+      "label": "Monthly"
+    }]
+  },
+  {
+    "name": "network_speed",
+    "type": "string",
+    "description": "Specify the connection speed for the instance’s network components. ",
+    "hidden": false,
+    "label": "Network Connection Speed",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false,
+    "options": [
+      {
+        "default": true,
+        "value": "1000",
+        "label": "1 Gbps"
+      },
+      {
+        "value": "100",
+        "label": "100 Mbps"
+      },
+      {
+        "value": "10",
+        "label": "10 Mbps"
+      }
+    ]
+  },
+  {
+    "name": "cores",
+    "type": "string",
+    "description": "The number of CPU cores to allocate. The default value is sufficient for the Content Runtime.",
+    "hidden": false,
+    "label": "CPU cores",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false,
+    "options": [
+      {
+        "value": "1",
+        "label": "1 x 2.0 GHz Core"
+      },
+      {
+        "value": "2",
+        "label": "2 x 2.0 GHz Cores"
+      },
+      {
+        "default": true,
+        "value": "4",
+        "label": "4 x 2.0 GHz Cores"
+      },
+      {
+        "value": "8",
+        "label": "8 x 2.0 GHz Cores"
+      },
+      {
+        "value": "12",
+        "label": "12 x 2.0 GHz Cores"
+      },
+      {
+        "value": "16",
+        "label": "16 x 2.0 GHz Cores"
+      }
+    ]
+  },
+  {
+    "name": "memory",
+    "type": "string",
+    "description": "The amount of RAM to allocate for the virtual machine. The default value is sufficient for the Content Runtime.",
+    "hidden": false,
+    "label": "RAM",
+    "group_name": "cloud_provider",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false,
+    "options": [
+      {
+        "value": "4096",
+        "label": "4 GB"
+      },
+      {
+        "default": true,
+        "value": "8192",
+        "label": "8 GB"
+      },
+      {
+        "value": "12288",
+        "label": "12 GB"
+      },
+      {
+        "value": "16384",
+        "label": "16 GB"
+      },
+      {
+        "value": "32768",
+        "label": "32 GB"
+      },
+      {
+        "value": "65536",
+        "label": "64 GB"
+      },
+      {
+        "value": "131072",
+        "label": "128 GB"
+      },
+      {
+        "value": "247808",
+        "label": "242 GB"
+      }
+    ]
+  },
+  {
+    "name": "network_visibility",
+    "type": "string",
+    "description": "The network connection associated with the Content Runtime VM instance. If network visibility is private, connection must exist from the IBM Cloud Private to the network connection associated with the Content Runtime VM being created.",
+    "hidden": false,
+    "label": "Network Visibility",
+    "group_name": "additional_settings",
+    "secured": false,
+    "system": false,
+    "required": true,
+    "immutable": false,
+    "options": [
+      {
+        "default": true,
+        "value": "public",
+        "label": "Public"
+      },
+      {
+        "value": "private",
+        "label": "Private" 
+      }
+    ]
+  },
+  {
+    "name": "prereq_strictness",
+    "type": "string",
+    "description": "If set to strict, the prerequisite checker will stop execution if one or more requirements is not installed. If set to lenient, it will proceed to install any missing requirement.",
+    "hidden": true,
+    "label": "Prerequisite checker strictness",
+    "group_name": "additional_settings",
+    "secured": false,
+    "system": false,
+    "required": true,
+    "immutable": false,
+    "options": [{
+        "default": true,
+        "value": "lenient",
+        "label": "Lenient"
+      }, {
+        "value": "strict",
+        "label": "Strict"
+      }]
+  },
+  {
+    "name": "installer_docker",
+    "type": "string",
+    "description": "Optional file location of a docker .deb/.rpm file to be installed on the system",
+    "default": "",
+    "hidden": true,
+    "label": "Docker installation file",
+    "group_name": "optional_offline",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "installer_docker_compose",
+    "type": "string",
+    "description": "Optional file location of a Docker Compose executable file to be installed on the system",
+    "default": "",
+    "hidden": true,
+    "label": "Docker Compose installation file",
+    "group_name": "optional_offline",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "sw_repo_image",
+    "type": "string",
+    "description": "Optional file location of the Software Repository Docker image to be loaded to the system",
+    "default": "",
+    "hidden": true,
+    "label": "Software Repository Docker image location",
+    "group_name": "optional_offline",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "pm_image",
+    "type": "string",
+    "description": "Optional file location of the Pattern Manager Docker image to be loaded to the system",
+    "default": "",
+    "hidden": true,
+    "label": "Pattern Manager Docker image location",
+    "group_name": "optional_offline",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  }
 ],
 "template_output_params":[
 {
@@ -806,144 +1045,375 @@
   "required": true,
   "immutable": true
 },
-{
-  "name": "nfs_mount",
-  "type": "string",
-  "description": "NFS Mount, internal setting use to indicate that there is no additional disk.",
-  "hidden": true,
-  "label": "NFS Mount",
-  "group_name": "content_template_output",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": true
-},
-{
-  "name": "ipv4_address",
-  "type": "string",
-  "description": "Static IPv4 to assign to this network interface. This must be a static IP, and it is the IP address of the machine as known to the network.",
-  "hidden": false,
-  "label": "Static IPv4 address",
-  "group_name": "content_template_output",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": false
-},
-{
-  "name": "vm_image_ssh_user",
-  "type": "string",
-  "description": "The user name which can be used to sign on to the system to configure the machine as a Content Runtime.",
-  "hidden": false,
-  "label": "OS Username",
-  "group_name": "content_template_output",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": false
-},
-{
-  "name": "vm_image_ssh_password",
-  "type": "string",
-  "description": "Password for signing onto the system to configure the machine as a Content Runtime. If an SSH key is provided this parameter is not needed.",
-  "hidden": false,
-  "label": "OS Username password",
-  "group_name": "content_template_output",
-  "secured": true,
-  "system": false,
-  "required": false,
-  "immutable": false
-},
-{
-  "name": "vm_image_ssh_private_key",
-  "type": "string",
-  "description": "The SSH key to connect to the VM to allow for configuration of the Content Runtime. The key is optional if the password is provided for the OS Username. The key is base64 encoded.",
-  "hidden": false,
-  "label": "OS SSH Private Key - Base64 encoded",
-  "group_name": "content_template_output",
-  "secured": true,
-  "system": false,
-  "required": false,
-  "immutable": false
-},
-{
-  "name": "network_visibility",
-  "type": "string",
-  "description": "The network connection associated with the Content Runtime VM instance. If network visibility is private, connection must exist from the IBM Cloud Private to the network connection associated with the Content Runtime VM being created.",
-  "hidden": false,
-  "label": "Network Visibility",
-  "group_name": "content_template_output",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": true
-},
-{
-  "name": "prereq_strictness",
-  "type": "string",
-  "description": "If set to strict, the prerequisite checker stops execution if one or more requirements is not installed. If set to lenient,  the prerequisite checker proceeds to install any missing requirement.",
-  "hidden": false,
-  "label": "Prerequisite checker strictness",
-  "group_name": "content_template_output",
-  "secured": false,
-  "system": false,
-  "required": true,
-  "immutable": false,
-  "options": [{
-      "label": "Lenient"
-    }, {
-      "label": "Strict"
+ {
+    "name": "runtime_domain",
+    "type": "string",
+    "description": "VM's domain name for the Content Runtime VM.",
+    "hidden": false,
+    "label": "VM's domain name",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "cam_public_key",
+    "type": "string",
+    "description": "Provide a public key for accessing the virtual machine. The key will be created.",
+    "hidden": false,
+    "label": "Public Key",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "ipv4_address",
+    "type": "string",
+    "description": "Static IPv4 address to be assigned to this network interface for the Content Runtime VM.",
+    "hidden": true,
+    "label": "Static IPv4",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": true,
+    "immutable": false
+  },
+  {
+    "name": "portable_private_ip",
+    "type": "string",
+    "description": "Portable private IPv4 address to be assigned to this network interface for the Content Runtime VM. If provided, the address needs to be static.",
+    "hidden": false,
+    "label": "Portable private IP address",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "portable_private_ip_netmask",
+    "type": "string",
+    "description": "Portable private netmask for the private IP added to the new Content Runtime VM. Required when assigning a portable IP address.",
+    "hidden": false,
+    "label": "Portable private netmask",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "portable_private_ip_gateway",
+    "type": "string",
+    "description": "Portable private gateway address to be assigned to the new Content Runtime VM. Required when assigning a portable IP address.",
+    "hidden": false,
+    "label": "Portable private gateway",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "ibmcloud_os_image",
+    "type": "string",
+    "description": "An operating system reference code that is used to provision the computing instance.",
+    "hidden": false,
+    "label": "OS Image Name",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": true
+  },
+  {
+    "name": "nfs_mount",
+    "type": "string",
+    "description": "Internal value",
+    "hidden": true,
+    "label": "Internal value",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": true
+  },
+  {
+    "name": "bluemix_softlayer_datacenter",
+    "type": "string",
+    "description": "Specify the data center to create the Content Runtime VM.",
+    "hidden": false,
+    "label": "Data Center",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "private_subnet",
+    "type": "string",
+    "description": "Private subnet for the private network interface of the instance. Accepted values are primary private networks and can be found in the subnets doc.",
+    "hidden": false,
+    "label": "Private subnet",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "private_vlan_name",
+    "type": "string",
+    "description": "Private VLAN name for the network interface of the instance.",
+    "hidden": false,
+    "label": "Private VLAN name",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": true,
+    "immutable": false
+  },
+  {
+    "name": "dedicated_acct_host_only",
+    "type": "string",
+    "description": "Specify whether or not the instance must only run on hosts with instances from the same account",
+    "hidden": false,
+    "label": "Dedicated Account Host",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false,
+    "options": [{
+      "label": "True"
+      }, {
+      "label": "False"
     }]
-},
-{
-  "name": "installer_docker",
-  "type": "string",
-  "description": "Optional file location of a docker .deb/.rpm file to be installed on the system",
-  "hidden": false,
-  "label": "Docker installation file",
-  "group_name": "content_template_output",
-  "secured": false,
-  "system": false,
-  "required": false,
-  "immutable": false
-},
-{
-  "name": "installer_docker_compose",
-  "type": "string",
-  "description": "Optional file location of a Docker Compose executable file to be installed on the system",
-  "hidden": false,
-  "label": "Docker Compose installation file",
-  "group_name": "content_template_output",
-  "secured": false,
-  "system": false,
-  "required": false,
-  "immutable": false
-},
-{
-  "name": "sw_repo_image",
-  "type": "string",
-  "description": "Optional file location of the Software Repository Docker image to be loaded to the system",
-  "hidden": false,
-  "label": "Software Repository Docker image location",
-  "group_name": "content_template_output",
-  "secured": false,
-  "system": false,
-  "required": false,
-  "immutable": false
-},
-{
-  "name": "pm_image",
-  "type": "string",
-  "description": "Optional file location of the Pattern Manager Docker image to be loaded to the system",
-  "hidden": false,
-  "label": "Pattern Manager Docker image location",
-  "group_name": "content_template_output",
-  "secured": false,
-  "system": false,
-  "required": false,
-  "immutable": false
-}
+  },
+  {
+    "name": "hourly_billing",
+    "type": "string",
+    "description": "Specify the billing type for the instance. The computing instance can be billed based on an hourly or monthly usage basis.",
+    "hidden": false,
+    "label": "Billing Type",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false,
+    "options": [{
+      "label": "Hourly"
+    }, {
+      "label": "Monthly"
+    }]
+  },
+  {
+    "name": "network_speed",
+    "type": "string",
+    "description": "Specify the connection speed for the instance’s network components. ",
+    "hidden": false,
+    "label": "Network Connection Speed",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false,
+    "options": [
+      {
+        "label": "1 Gbps"
+      },
+      {
+        "label": "100 Mbps"
+      },
+      {
+        "label": "10 Mbps"
+      }
+    ]
+  },
+  {
+    "name": "cores",
+    "type": "string",
+    "description": "The number of CPU cores to allocate. The default value is sufficient for the Content Runtime.",
+    "hidden": false,
+    "label": "CPU cores",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false,
+    "options": [
+      {
+        "label": "1 x 2.0 GHz Core"
+      },
+      {
+        "label": "2 x 2.0 GHz Cores"
+      },
+      {
+        "label": "4 x 2.0 GHz Cores"
+      },
+      {
+        "label": "8 x 2.0 GHz Cores"
+      },
+      {
+        "label": "12 x 2.0 GHz Cores"
+      },
+      {
+        "label": "16 x 2.0 GHz Cores"
+      }
+    ]
+  },
+  {
+    "name": "memory",
+    "type": "string",
+    "description": "The amount of RAM to allocate for the virtual machine. The default value is sufficient for the Content Runtime.",
+    "hidden": false,
+    "label": "RAM",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false,
+    "options": [
+      {
+        "label": "4 GB"
+      },
+      {
+        "label": "8 GB"
+      },
+      {
+        "label": "12 GB"
+      },
+      {
+        "label": "16 GB"
+      },
+      {
+        "label": "32 GB"
+      },
+      {
+        "label": "64 GB"
+      },
+      {
+        "label": "128 GB"
+      },
+      {
+        "label": "242 GB"
+      }
+    ]
+  },
+  {
+    "name": "network_visibility",
+    "type": "string",
+    "description": "The network connection associated with the Content Runtime VM instance. If network visibility is private, connection must exist from the IBM Cloud Private to the network connection associated with the Content Runtime VM being created.",
+    "hidden": false,
+    "label": "Network Visibility",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": true,
+    "immutable": false,
+    "options": [
+      {
+        "label": "Public"
+      },
+      {
+        "label": "Private" 
+      }
+    ]
+  },
+  {
+    "name": "prereq_strictness",
+    "type": "string",
+    "description": "If set to strict, the prerequisite checker will stop execution if one or more requirements is not installed. If set to lenient, it will proceed to install any missing requirement.",
+    "hidden": true,
+    "label": "Prerequisite checker strictness",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": true,
+    "immutable": false,
+    "options": [{
+        "label": "Lenient"
+      }, {
+        "label": "Strict"
+      }]
+  },
+  {
+    "name": "installer_docker",
+    "type": "string",
+    "description": "Optional file location of a docker .deb/.rpm file to be installed on the system",
+    "hidden": true,
+    "label": "Docker installation file",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "installer_docker_compose",
+    "type": "string",
+    "description": "Optional file location of a Docker Compose executable file to be installed on the system",
+    "hidden": true,
+    "label": "Docker Compose installation file",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "sw_repo_image",
+    "type": "string",
+    "description": "Optional file location of the Software Repository Docker image to be loaded to the system",
+    "hidden": true,
+    "label": "Software Repository Docker image location",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  },
+  {
+    "name": "pm_image",
+    "type": "string",
+    "description": "Optional file location of the Pattern Manager Docker image to be loaded to the system",
+    "hidden": true,
+    "label": "Pattern Manager Docker image location",
+    "group_name": "content_template_output",
+    "secured": false,
+    "system": false,
+    "required": false,
+    "immutable": false
+  }
 ,
+{
+  "name": "private_key",
+  "type": "string",
+  "description": "Private Key associated with the Content Runtime VM",
+  "hidden": true,
+  "label": "Private Key for Content Runtime VM",
+  "group_name": "content_template_output",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
+},
+{
+  "name": "public_key",
+  "type": "string",
+  "description": "Public Key associated with the Content Runtime VM",
+  "hidden": false,
+  "label": "Public Key for Content Runtime VM",
+  "group_name": "content_template_output",
+  "secured": false,
+  "system": false,
+  "required": false,
+  "immutable": false
+},
 {
   "name": "ip_address",
   "type": "string",

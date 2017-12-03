@@ -1,6 +1,6 @@
  {
-    "name": "Bring your own VM public CAM Content Runtime",
-    "description": "Bring your own VM Resource to instantiate CAM Content Runtime.",
+    "name": "AWS public CAM Content Runtime",
+    "description": "AWS Resource to instantiate CAM Content Runtime.",
     "version": "1.0.2",
     "imageUrl": "./assets/svg/IBM_WebSphere_Standalone.svg",
     "image": "tp_WAS_standalone.png",
@@ -9,21 +9,27 @@
     "manifest": {
       "template_type": "Terraform",
       "template_format": "HCL",
-      "template_provider": "Other",
+      "template_provider": "Amazon EC2",
       "template": {
         "templateData": "",
         "templateVariables": "",
         "templateOutput": ""
+      },
+      "template_source": {
+        "githubRepoUrl": "",
+        "githubAccessToken": "",
+        "relativePathToTemplateFolder": "content_runtime_template/amazon/public",
+        "templateFileName": "content_runtime.tf"
       }
     },
     "metadata": {
       "displayName": "CAM Content Runtime with public Network",
-      "providerDisplayName": "Other",
+      "providerDisplayName": "Amazon EC2",
       "longDescription": "Deploy the Content Runtime for CAM",
       "bullets": [
        {
          "title": "Clouds",
-         "description": "other"
+         "description": "amazon"
        },
        {
          "title": "Template version",
@@ -31,11 +37,11 @@
        },
        {
          "title": "Operating systems supported",
-         "description": "other: Ubuntu 14.4.01 x64"
+         "description": "amazon: Ubuntu 14.4.01 x64"
        },
        {
          "title": "Topology",
-         "description": "other: Single virtual machines"
+         "description": "amazon: Single virtual machines"
        },
        {
          "title": "Default virtual machine settings",
