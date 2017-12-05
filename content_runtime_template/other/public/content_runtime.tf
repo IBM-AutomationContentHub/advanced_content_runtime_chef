@@ -9,7 +9,6 @@
  variable "docker_registry" { type = "string" }
  variable "docker_registry_camc_pattern_manager_version" { type = "string" }
  variable "docker_registry_camc_sw_repo_version" { type = "string" }
- variable "chef_version" { type = "string" }
  variable "ibm_sw_repo_user" { type = "string" }
  variable "ibm_sw_repo_password" { type = "string" }
  variable "ibm_im_repo_user_hidden" { type = "string" }
@@ -40,6 +39,7 @@
  variable "installer_docker_compose" { type = "string" }
  variable "sw_repo_image" { type = "string" }
  variable "pm_image" { type = "string" }
+ variable "chef_version" { type = "string" }
 ### End Input
 
 provider "null" {
@@ -1709,7 +1709,7 @@ EndOfFile
   output "ibm_im_repo_password" {
   value = "${var.ibm_sw_repo_password}" }
   output "template_timestamp" {
-  value = "2017-11-30 14:42:02" }
+  value = "2017-12-05 14:51:03" }
 ### End Other output variables
 
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
@@ -1717,7 +1717,6 @@ output "docker_registry_token" { value = "${var.docker_registry_token}"}
 output "docker_registry" { value = "${var.docker_registry}"}
 output "docker_registry_camc_pattern_manager_version" { value = "${var.docker_registry_camc_pattern_manager_version}"}
 output "docker_registry_camc_sw_repo_version" { value = "${var.docker_registry_camc_sw_repo_version}"}
-output "chef_version" { value = "${var.chef_version}"}
 output "ibm_sw_repo_user" { value = "${var.ibm_sw_repo_user}"}
 output "ibm_sw_repo_password" { value = "${var.ibm_sw_repo_password}"}
 output "ibm_im_repo_user_hidden" { value = "${var.ibm_im_repo_user_hidden}"}
@@ -1748,4 +1747,5 @@ output "installer_docker" { value = "${var.installer_docker}"}
 output "installer_docker_compose" { value = "${var.installer_docker_compose}"}
 output "sw_repo_image" { value = "${var.sw_repo_image}"}
 output "pm_image" { value = "${var.pm_image}"}
+output "chef_version" { value = "${var.chef_version}"}
 ### End Output
