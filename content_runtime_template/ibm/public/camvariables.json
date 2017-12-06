@@ -320,7 +320,7 @@
   "name": "template_timestamp_hidden",
   "type": "string",
   "description": "Internal automatically updated variable containing the Content Runtime template timestamp",
-  "default": "2017-12-05 14:50:54",
+  "default": "2017-12-06 16:27:00",
   "hidden": true,
   "label": "Template Timestamp",
   "group_name": "additional_settings",
@@ -357,10 +357,10 @@
   {
     "name": "cam_public_key",
     "type": "string",
-    "description": "Provide a public key for accessing the virtual machine. The key will be created.",
+    "description": "Provide a public key name. The key will be created and stored in the IBM Cloud as a resource with the name Hostname_PrivateKeyName. The private portion of the key can be found in the log file in the terraform data.",
     "default": "cam_public_key",
     "hidden": false,
-    "label": "Public Key",
+    "label": "Public Key Name",
     "group_name": "cloud_provider",
     "secured": false,
     "system": false,
@@ -476,7 +476,7 @@
     "group_name": "cloud_provider",
     "secured": false,
     "system": false,
-    "required": true,
+    "required": false,
     "immutable": false
   },
   {
@@ -1048,9 +1048,9 @@
   {
     "name": "cam_public_key",
     "type": "string",
-    "description": "Provide a public key for accessing the virtual machine. The key will be created.",
+    "description": "Provide a public key name. The key will be created and stored in the IBM Cloud as a resource with the name Hostname_PrivateKeyName. The private portion of the key can be found in the log file in the terraform data.",
     "hidden": false,
-    "label": "Public Key",
+    "label": "Public Key Name",
     "group_name": "content_template_output",
     "secured": false,
     "system": false,
@@ -1162,7 +1162,7 @@
     "group_name": "content_template_output",
     "secured": false,
     "system": false,
-    "required": true,
+    "required": false,
     "immutable": false
   },
   {

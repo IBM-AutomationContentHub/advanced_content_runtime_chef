@@ -1757,7 +1757,7 @@ EndOfFile
   output "ibm_im_repo_password" {
   value = "${var.ibm_sw_repo_password}" }
   output "template_timestamp" {
-  value = "2017-12-05 14:50:59" }
+  value = "2017-12-06 16:27:05" }
 ### End VMware output variables
 
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
