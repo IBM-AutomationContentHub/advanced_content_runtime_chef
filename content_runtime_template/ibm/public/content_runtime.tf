@@ -1264,12 +1264,33 @@ function setup_aws_public() { # This is for the PUBLIC network
   # The IP is a virual address on top of the VM, and the request does not leave the machine
   # In turn the information is set back onto the VM to allow Chef and other packages to get information
   # about the configuration as they expect in a standard machine
-  IPADDR=`curl http://169.254.169.254/latest/meta-data/public-ipv4` # ~ip_checker
-  DOMAIN=`curl http://169.254.169.254/latest/meta-data/public-hostname| cut -f2- -d'.' ` # ~ip_checker
-  HOSTNAME=`curl http://169.254.169.254/latest/meta-data/public-hostname| cut -f1 -d'.' ` # ~ip_checker
-  # For chef local configuration, we need to fix up the host name on aws
-  sudo hostname `curl http://169.254.169.254/latest/meta-data/public-hostname` # ~ip_checker
+  metadata=169.254.169.254 # ~ip_checker
+  IPADDR=`curl http://$metadata/latest/meta-data/public-ipv4`
+  DOMAIN=`curl http://$metadata/latest/meta-data/public-hostname| cut -f2- -d'.' `
+  HOSTNAME=`curl http://$metadata/latest/meta-data/public-hostname| cut -f1 -d'.' `
+
+  # It is possible that the hostname is not set, we need to fall back to private configuration
+  if [[ -z "$HOSTNAME" ]] ; then  # we also assume the DOMAIN is not set in this case
+    if [[ `which nslookup` ]] ; then # Since this is a public IP we should be able to get information back on the address
+      local fqn=`nslookup $IPADDR | egrep "in-addr.arpa" | cut -f2 -d'=' | tr -d ' ' | rev | cut -c2- | rev`
+      DOMAIN=`echo $fqn | cut -f2- -d'.'`
+      HOSTNAME=`echo $fqn | cut -f1 -d'.'`
+      sudo hostname $fqn
+    fi
+    if [[ -z "$HOSTNAME" ]] ; then # fall back to the private IP
+      HOSTNAME=`curl http://$metadata/latest/meta-data/local-hostname| cut -f1 -d'.' `
+      [[ "curl http://$metadata/latest/dynamic/instance-identity/document | egrep 'region.*us-east-1'" ]] && DOMAIN=ec2.internal || DOMAIN=`curl http://$metadata/latest/dynamic/instance-identity/document | cut -f4 -d'"'`.compute.internal # ~ip_checker
+      [[ `echo $DOMAIN | cut -c1` == '.' ]] && DOMAIN=`echo $DOMAIN | cut -c2-` # if we filed to find the DOMAIN in the grep, fall back to compute.internal
+      # For chef local configuration, we need to fix up the host name on aws
+      sudo hostname $HOSTNAME.$DOMAIN
+      echo $IPADDR $HOSTNAME.$DOMAIN | sudo tee -a /etc/hosts
+    fi
+  else
+    # For chef local configuration, we need to fix up the host name on aws
+    sudo hostname `curl http://$metadata/latest/meta-data/public-hostname`
+  fi
 }
+
 
 function setup_other_private() {
   # this is used to get the domain name of the docker host, and pass to the rest of the infrastructure, based on the docker node
@@ -1802,7 +1823,7 @@ EndOfFile
   output "ibm_im_repo_password" {
   value = "${var.ibm_sw_repo_password}" }
   output "template_timestamp" {
-  value = "2017-12-06 16:27:00" }
+  value = "2017-12-07 19:08:52" }
 
 ### End IBM output variables
 output "runtime_hostname" { value = "${var.runtime_hostname}"}
